@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Surat Perintah Kerja (SPK)</title>
+    <style>
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            /* SPK biasanya lebih formal */
+            font-size: 11pt;
+            line-height: 1.4;
+            color: #000;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h2 {
+            text-decoration: underline;
+            margin: 0;
+            font-size: 16pt;
+            text-transform: uppercase;
+        }
+
+        .header p {
+            margin: 5px 0 0 0;
+            font-size: 12pt;
+        }
+
+        .content {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+
+        .table-info {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0 20px 0;
+        }
+
+        .table-info td {
+            padding: 5px;
+            vertical-align: top;
+        }
+
+        .label {
+            width: 180px;
+        }
+
+        .separator {
+            width: 10px;
+        }
+
+        /* Pasal-pasal */
+        .article {
+            margin-bottom: 15px;
+        }
+
+        .article-title {
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        /* Tanda Tangan */
+        .signature-section {
+            margin-top: 50px;
+            width: 100%;
+            page-break-inside: avoid;
+        }
+
+        .signature-table {
+            width: 100%;
+            text-align: center;
+        }
+
+        .signature-box {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .signature-name {
+            font-weight: bold;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h2>SURAT PERINTAH KERJA</h2>
+        <p>Nomor: <%= data['Nomor SPK'] || '......./......./......./.......' %>
+        </p>
+    </div>
+
+    <div class="content">
+        <p>Pada hari ini, <strong>
+                <%= helpers.moment(data.Timestamp).locale('id').format('dddd') %>
+            </strong>, tanggal <strong>
+                <%= helpers.moment(data.Timestamp).locale('id').format('DD') %>
+            </strong>, bulan <strong>
+                <%= helpers.moment(data.Timestamp).locale('id').format('MMMM') %>
+            </strong>, tahun <strong>
+                <%= helpers.moment(data.Timestamp).locale('id').format('YYYY') %>
+            </strong>, yang bertanda tangan di bawah ini:</p>
+
+        <table class="table-info">
+            <tr>
+                <td class="label">1. Nama</td>
+                <td class="separator">:</td>
+                <td><strong>
+                        <%= data['Nama Branch Manager'] || '.........................' %>
+                    </strong></td>
+            </tr>
+            <tr>
+                <td class="label"> Jabatan</td>
+                <td class="separator">:</td>
+                <td>Branch Manager</td>
+            </tr>
+            <tr>
+                <td class="label"> Alamat</td>
+                <td class="separator">:</td>
+                <td>
+                    <%= data['Alamat Cabang'] || 'Kantor Cabang Alfamart ' + data.Cabang %>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="3">
+                    Dalam hal ini bertindak untuk dan atas nama PT. SUMBER ALFARIA TRIJAYA, Tbk, selanjutnya disebut
+                    <strong>PIHAK PERTAMA</strong>.
+                </td>
+            </tr>
+        </table>
+
+        <table class="table-info">
+            <tr>
+                <td class="label">2. Nama</td>
+                <td class="separator">:</td>
+                <td><strong>
+                        <%= data['Nama Kontraktor'] || data.Vendor || '.........................' %>
+                    </strong></td>
+            </tr>
+            <tr>
+                <td class="label"> Perusahaan</td>
+                <td class="separator">:</td>
+                <td>
+                    <%= data['Nama PT Kontraktor'] || '.........................' %>
+                </td>
+            </tr>
+            <tr>
+                <td class="label"> Alamat</td>
+                <td class="separator">:</td>
+                <td>
+                    <%= data['Alamat Kontraktor'] || '.........................' %>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="3">
+                    Dalam hal ini bertindak untuk dan atas nama perusahaan tersebut di atas, selanjutnya disebut
+                    <strong>PIHAK KEDUA</strong>.
+                </td>
+            </tr>
+        </table>
+
+        <p>Kedua belah pihak sepakat untuk mengikatkan diri dalam Surat Perintah Kerja (SPK) dengan ketentuan sebagai
+            berikut:</p>
+
+        <div class="article">
+            <div class="article-title">Pasal 1<br>LINGKUP PEKERJAAN</div>
+            <p>PIHAK PERTAMA memberikan tugas kepada PIHAK KEDUA, dan PIHAK KEDUA menerima tugas tersebut untuk
+                melaksanakan pekerjaan:</p>
+            <table class="table-info">
+                <tr>
+                    <td class="label">Jenis Pekerjaan</td>
+                    <td class="separator">:</td>
+                    <td>
+                        <%= data['Lingkup Pekerjaan'] || data.Lingkup_Pekerjaan %>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label">Lokasi / Toko</td>
+                    <td class="separator">:</td>
+                    <td>
+                        <%= data['Nama_Toko'] || data.Proyek %> (<%= data['Nomor Ulok'] %>)
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label">Detail Pekerjaan</td>
+                    <td class="separator">:</td>
+                    <td>Sesuai dengan lampiran RAB/Instruksi Lapangan yang telah disetujui.</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="article">
+            <div class="article-title">Pasal 2<br>BIAYA PEKERJAAN</div>
+            <p>Total biaya untuk pelaksanaan pekerjaan tersebut di atas adalah sebesar:</p>
+            <p style="text-align: center; font-weight: bold; font-size: 1.1em;">
+                <%= helpers.formatRupiah(data.Biaya) %>
+            </p>
+            <p style="text-align: center; font-style: italic;">
+                <%= data.Terbilang %>
+            </p>
+            <p>Harga tersebut sudah termasuk PPN 11%, material, upah, dan biaya pendukung lainnya.</p>
+        </div>
+
+        <div class="article">
+            <div class="article-title">Pasal 3<br>JANGKA WAKTU PELAKSANAAN</div>
+            <p>Pekerjaan tersebut harus diselesaikan dalam jangka waktu <strong>
+                    <%= data.Durasi %>
+                </strong> hari kalender, terhitung mulai tanggal:</p>
+            <table class="table-info">
+                <tr>
+                    <td class="label">Tanggal Mulai</td>
+                    <td class="separator">:</td>
+                    <td>
+                        <%= helpers.moment(data['Waktu Mulai']).format('DD MMMM YYYY') %>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label">Tanggal Selesai</td>
+                    <td class="separator">:</td>
+                    <td>
+                        <%= helpers.moment(data['Waktu Selesai']).format('DD MMMM YYYY') %>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <p>Demikian Surat Perintah Kerja ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.</p>
+    </div>
+
+    <div class="signature-section">
+        <table class="signature-table">
+            <tr>
+                <td width="50%">
+                    PIHAK KEDUA,<br>
+                    <strong>
+                        <%= data['Nama PT Kontraktor'] || 'Kontraktor' %>
+                    </strong>
+                    <br><br>
+                    <div class="signature-box">
+                    </div>
+                    <span class="signature-name">
+                        <%= data['Nama Kontraktor'] || '(.........................)' %>
+                    </span><br>
+                    Direktur / Pimpinan
+                </td>
+                <td width="50%">
+                    PIHAK PERTAMA,<br>
+                    <strong>PT. SUMBER ALFARIA TRIJAYA, Tbk</strong>
+                    <br><br>
+                    <div class="signature-box">
+                        <% if (data.Status==='SPK Disetujui' ) { %>
+                            <div
+                                style="border: 2px solid green; padding: 5px; color: green; font-weight: bold; transform: rotate(-5deg);">
+                                DIGITAL APPROVED<br>
+                                <span style="font-size: 0.7em">
+                                    <%= helpers.moment(data['Waktu Persetujuan']).format('DD/MM/YYYY HH:mm') %>
+                                </span>
+                            </div>
+                            <% } else { %>
+                                <br><br><br>
+                                <% } %>
+                    </div>
+                    <span class="signature-name">
+                        <%= data['Disetujui Oleh'] || data['Nama Branch Manager'] || 'Branch Manager' %>
+                    </span><br>
+                    Branch Manager
+                </td>
+            </tr>
+        </table>
+    </div>
+
+</body>
+
+</html>
