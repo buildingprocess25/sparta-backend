@@ -7,6 +7,8 @@ const authController = {
     login: async (req, res) => {
         try {
             const { email, cabang } = req.body;
+            // Debug: console.log("Login Request:", req.body);
+            console.log("Login Request:", req.body);
 
             // 1. Validasi Input
             if (!email || !cabang) {

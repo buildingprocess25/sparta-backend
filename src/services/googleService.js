@@ -78,7 +78,7 @@ const googleService = {
 
     validateUser: async (email, cabang) => {
         try {
-            const doc = await getDoc(config.SPREADSHEET_ID);
+            const doc = await getDoc(config.SPREADSHEET_ID_RAB_2);
             const sheet = doc.sheetsByTitle[config.CABANG_SHEET_NAME];
             const rows = await sheet.getRows();
 
