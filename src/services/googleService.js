@@ -1,40 +1,41 @@
-// src/services/googleService.js
-const { JWT } = require('google-auth-library');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { google } = require('googleapis');
+const { JWT } = require('google-auth-library');
 const config = require('../config/config');
 const moment = require('moment');
 const stream = require('stream');
 
-// --- Setup Autentikasi ---
-// Mengambil kredensial dari Environment Variables
+// --- Setup Autentikasi (Google APIs Generic) ---
+// Kita gunakan JWT manual untuk Drive, Gmail, & Calendar
 const serviceAccountAuth = new JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     key: process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') : "",
     scopes: [
-        'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive',
         'https://www.googleapis.com/auth/gmail.send',
         'https://www.googleapis.com/auth/calendar'
     ]
 });
 
-// Inisialisasi API Clients
 const drive = google.drive({ version: 'v3', auth: serviceAccountAuth });
 const gmail = google.gmail({ version: 'v1', auth: serviceAccountAuth });
 const calendar = google.calendar({ version: 'v3', auth: serviceAccountAuth });
 
 // --- Helper Functions ---
 
-// Helper: Mendapatkan Instance Spreadsheet Doc
+// Helper: Get Doc (Versi 3.3.0 Style)
 const getDoc = async (spreadsheetId) => {
-    const doc = new GoogleSpreadsheet(spreadsheetId, serviceAccountAuth);
+    const doc = new GoogleSpreadsheet(spreadsheetId);
+    // V3: Auth dilakukan dengan method useServiceAccountAuth
+    await doc.useServiceAccountAuth({
+        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') : "",
+    });
     await doc.loadInfo();
     return doc;
 };
 
-// Helper: Membuat Raw Email String (MIME) untuk Gmail API
-// Ini menggantikan MIMEMultipart di Python
+// Helper: Membuat Raw Email String (MIME)
 const createRawEmail = (to, subject, htmlBody, attachments = []) => {
     const boundary = "foo_bar_baz";
     const toStr = Array.isArray(to) ? to.join(',') : to;
@@ -55,7 +56,7 @@ const createRawEmail = (to, subject, htmlBody, attachments = []) => {
 
     if (attachments && attachments.length > 0) {
         attachments.forEach(att => {
-            const { filename, content, type } = att; // content harus base64 string
+            const { filename, content, type } = att;
             email += [
                 `--${boundary}`,
                 `Content-Type: ${type}; name="${filename}"`,
@@ -81,12 +82,13 @@ const googleService = {
             const sheet = doc.sheetsByTitle[config.CABANG_SHEET_NAME];
             const rows = await sheet.getRows();
 
+            // V3: Akses data kolom langsung sebagai properti object (case sensitive sesuai header di sheet)
             const user = rows.find(row =>
-                String(row.get('EMAIL_SAT')).trim().toLowerCase() === String(email).trim().toLowerCase() &&
-                String(row.get('CABANG')).trim().toLowerCase() === String(cabang).trim().toLowerCase()
+                String(row['EMAIL_SAT'] || "").trim().toLowerCase() === String(email).trim().toLowerCase() &&
+                String(row['CABANG'] || "").trim().toLowerCase() === String(cabang).trim().toLowerCase()
             );
 
-            return user ? user.get('JABATAN') : null;
+            return user ? user['JABATAN'] : null;
         } catch (error) {
             console.error("Validate User Error:", error);
             return null;
@@ -104,10 +106,11 @@ const googleService = {
             let managerInfo = {};
 
             rows.forEach(row => {
-                if (String(row.get('CABANG')).trim().toLowerCase() === String(cabang).trim().toLowerCase()) {
-                    const jabatan = String(row.get('JABATAN')).toUpperCase();
-                    const email = row.get('EMAIL_SAT');
-                    const nama = row.get('NAMA LENGKAP');
+                const rowCabang = String(row['CABANG'] || "").trim().toLowerCase();
+                if (rowCabang === String(cabang).trim().toLowerCase()) {
+                    const jabatan = String(row['JABATAN'] || "").toUpperCase();
+                    const email = row['EMAIL_SAT'];
+                    const nama = row['NAMA LENGKAP'];
 
                     if (jabatan.includes("SUPPORT")) {
                         picList.push({ email, nama });
@@ -134,9 +137,12 @@ const googleService = {
 
             const emails = [];
             rows.forEach(row => {
-                if (String(row.get('CABANG')).trim().toLowerCase() === String(cabang).trim().toLowerCase() &&
-                    String(row.get('JABATAN')).trim().toUpperCase() === String(jabatanTarget).trim().toUpperCase()) {
-                    if (row.get('EMAIL_SAT')) emails.push(row.get('EMAIL_SAT'));
+                const rowCabang = String(row['CABANG'] || "").trim().toLowerCase();
+                const rowJabatan = String(row['JABATAN'] || "").trim().toUpperCase();
+
+                if (rowCabang === String(cabang).trim().toLowerCase() &&
+                    rowJabatan === String(jabatanTarget).trim().toUpperCase()) {
+                    if (row['EMAIL_SAT']) emails.push(row['EMAIL_SAT']);
                 }
             });
             return emails;
@@ -157,7 +163,7 @@ const googleService = {
         try {
             const doc = await getDoc(spreadsheetId);
             const sheet = doc.sheetsByTitle[sheetName];
-            const rows = await sheet.getRows(); // rows[0] adalah baris ke-2 di sheet
+            const rows = await sheet.getRows();
 
             const pending = [];
             const approved = [];
@@ -165,15 +171,16 @@ const googleService = {
             const processedLocations = new Set();
             const userCabang = String(cabang).trim().toLowerCase();
 
-            // Loop dari bawah ke atas (terbaru)
+            // Loop dari bawah (terbaru) ke atas
             for (let i = rows.length - 1; i >= 0; i--) {
                 const row = rows[i];
-                const lokasi = String(row.get(config.COLUMN_NAMES.LOKASI)).trim().toUpperCase();
+                // V3: Akses menggunakan nama kolom dari config
+                const lokasi = String(row[config.COLUMN_NAMES.LOKASI] || "").trim().toUpperCase();
 
                 if (!lokasi || processedLocations.has(lokasi)) continue;
 
-                const status = String(row.get(config.COLUMN_NAMES.STATUS)).trim();
-                const recordCabang = String(row.get(config.COLUMN_NAMES.CABANG)).trim().toLowerCase();
+                const status = String(row[config.COLUMN_NAMES.STATUS] || "").trim();
+                const recordCabang = String(row[config.COLUMN_NAMES.CABANG] || "").trim().toLowerCase();
 
                 if ([config.STATUS.WAITING_FOR_COORDINATOR, config.STATUS.WAITING_FOR_MANAGER].includes(status)) {
                     pending.push(lokasi);
@@ -181,15 +188,19 @@ const googleService = {
                     approved.push(lokasi);
                 } else if ([config.STATUS.REJECTED_BY_COORDINATOR, config.STATUS.REJECTED_BY_MANAGER].includes(status)) {
                     if (recordCabang === userCabang) {
-                        // Ubah row object menjadi plain object
-                        const rowData = row.toObject();
-                        // Parse JSON details jika ada
-                        const jsonDetails = row.get('Item_Details_JSON');
+                        // Di V3, row object bisa diakses propertinya, tapi untuk JSON field kita perlu parse
+                        const rowData = {};
+                        // Salin semua properti row ke rowData agar aman
+                        sheet.headerValues.forEach(h => {
+                            rowData[h] = row[h];
+                        });
+
+                        const jsonDetails = row['Item_Details_JSON'];
                         if (jsonDetails) {
                             try {
                                 const parsed = JSON.parse(jsonDetails);
                                 Object.assign(rowData, parsed);
-                            } catch (e) { console.warn("JSON Parse Error for row", i); }
+                            } catch (e) { console.warn("JSON Parse Error"); }
                         }
                         rejected.push(rowData);
                     }
@@ -214,9 +225,9 @@ const googleService = {
         const normalizedUlok = String(ulok).replace(/-/g, '');
 
         return rows.some(row => {
-            const rowUlok = String(row.get(config.COLUMN_NAMES.LOKASI)).replace(/-/g, '');
-            const rowLingkup = String(row.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)).trim();
-            const status = row.get(config.COLUMN_NAMES.STATUS);
+            const rowUlok = String(row[config.COLUMN_NAMES.LOKASI] || "").replace(/-/g, '');
+            const rowLingkup = String(row[config.COLUMN_NAMES.LINGKUP_PEKERJAAN] || "").trim();
+            const status = row[config.COLUMN_NAMES.STATUS];
 
             return (rowUlok === normalizedUlok &&
                 rowLingkup === lingkup &&
@@ -231,14 +242,13 @@ const googleService = {
 
         const normalizedUlok = String(ulok).replace(/-/g, '');
 
-        // Cek dari bawah (terbaru)
         for (let i = rows.length - 1; i >= 0; i--) {
             const row = rows[i];
-            const rowUlok = String(row.get(config.COLUMN_NAMES.LOKASI)).replace(/-/g, '');
-            const rowEmail = row.get(config.COLUMN_NAMES.EMAIL_PEMBUAT);
+            const rowUlok = String(row[config.COLUMN_NAMES.LOKASI] || "").replace(/-/g, '');
+            const rowEmail = row[config.COLUMN_NAMES.EMAIL_PEMBUAT];
 
             if (rowUlok === normalizedUlok && rowEmail === email) {
-                const status = row.get(config.COLUMN_NAMES.STATUS);
+                const status = row[config.COLUMN_NAMES.STATUS];
                 return [config.STATUS.REJECTED_BY_COORDINATOR, config.STATUS.REJECTED_BY_MANAGER].includes(status);
             }
         }
@@ -251,15 +261,14 @@ const googleService = {
         const rows = await sheet.getRows();
         const normalizedUlok = String(ulok).replace(/-/g, '').trim().toUpperCase();
 
-        // Cari index row (1-based sheet row index)
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
-            const rowUlok = String(row.get(config.COLUMN_NAMES.LOKASI)).replace(/-/g, '').trim().toUpperCase();
-            const status = row.get(config.COLUMN_NAMES.STATUS);
+            const rowUlok = String(row[config.COLUMN_NAMES.LOKASI] || "").replace(/-/g, '').trim().toUpperCase();
+            const status = row[config.COLUMN_NAMES.STATUS];
 
             if (rowUlok === normalizedUlok &&
                 [config.STATUS.REJECTED_BY_COORDINATOR, config.STATUS.REJECTED_BY_MANAGER].includes(status)) {
-                return row.rowNumber; // Ini mengembalikan nomor baris asli di Excel (misal 5)
+                return row.rowIndex; // V3 menggunakan rowIndex (1-based index di Excel)
             }
         }
         return null;
@@ -270,9 +279,9 @@ const googleService = {
             const doc = await getDoc(spreadsheetId);
             const sheet = doc.sheetsByTitle[sheetName];
 
-            // Tambah baris baru
+            // V3: addRow langsung menerima object { Header: Value }
             const addedRow = await sheet.addRow(data);
-            return addedRow.rowNumber;
+            return addedRow.rowIndex;
         } catch (error) {
             console.error("Append Row Error:", error);
             throw error;
@@ -285,13 +294,18 @@ const googleService = {
             const sheet = doc.sheetsByTitle[sheetName];
             const rows = await sheet.getRows();
 
-            // rowIndex adalah nomor baris Excel (misal 2, 3, ...). 
-            // Array rows index mulai dari 0 (dimana 0 adalah row 2).
+            // rowIndex dari findRejectedRow adalah 1-based (Excel row number).
+            // sheet.getRows() mengembalikan array mulai dari baris data (biasanya baris 2).
+            // Jadi row ke-0 di array = baris 2 di Excel.
+            // Rumus: arrayIndex = rowIndex - 2
             const rowToUpdate = rows[rowIndex - 2];
 
             if (rowToUpdate) {
-                Object.assign(rowToUpdate, data); // Update object
-                await rowToUpdate.save(); // Simpan ke sheet
+                // V3: Assign value ke properti object row
+                Object.keys(data).forEach(key => {
+                    rowToUpdate[key] = data[key];
+                });
+                await rowToUpdate.save(); // Simpan perubahan
                 return true;
             }
             return false;
@@ -309,7 +323,7 @@ const googleService = {
             const row = rows[rowIndex - 2];
 
             if (row) {
-                row.set(colName, value);
+                row[colName] = value; // Assign langsung
                 await row.save();
                 return true;
             }
@@ -340,7 +354,15 @@ const googleService = {
             const sheet = doc.sheetsByTitle[sheetName];
             const rows = await sheet.getRows();
             const row = rows[rowIndex - 2];
-            return row ? row.toObject() : null;
+
+            if (!row) return null;
+
+            // Convert row V3 object to plain object
+            const rowData = {};
+            sheet.headerValues.forEach(header => {
+                rowData[header] = row[header];
+            });
+            return rowData;
         } catch (error) {
             return null;
         }
@@ -358,7 +380,6 @@ const googleService = {
 
     uploadFile: async (fileBuffer, fileName, mimeType, folderId = config.PDF_STORAGE_FOLDER_ID) => {
         try {
-            // Convert buffer to stream for Google Drive API
             const bufferStream = new stream.PassThrough();
             bufferStream.end(fileBuffer);
 
@@ -378,7 +399,6 @@ const googleService = {
                 fields: 'id, webViewLink'
             });
 
-            // Set Permission agar bisa diakses public/anyone with link (opsional, sesuaikan kebutuhan)
             await drive.permissions.create({
                 fileId: file.data.id,
                 requestBody: {
@@ -398,7 +418,6 @@ const googleService = {
         try {
             if (!fileLink || !fileLink.includes("drive.google.com")) return [null, null, null];
 
-            // Extract File ID
             let fileId = null;
             if (fileLink.includes("/d/")) {
                 fileId = fileLink.split("/d/")[1].split("/")[0];
@@ -408,12 +427,10 @@ const googleService = {
 
             if (!fileId) return [null, null, null];
 
-            // Get Metadata
             const metadata = await drive.files.get({ fileId, fields: 'name, mimeType' });
             const name = metadata.data.name || "Lampiran.pdf";
             const mimeType = metadata.data.mimeType || "application/pdf";
 
-            // Download Content
             const response = await drive.files.get(
                 { fileId, alt: 'media' },
                 { responseType: 'arraybuffer' }
@@ -430,10 +447,7 @@ const googleService = {
 
     sendEmail: async (to, subject, htmlBody, attachments = []) => {
         try {
-            // Encode attachments ke Base64 untuk MIME
             const processedAttachments = attachments.map(att => {
-                // att bisa berupa tuple [filename, buffer, mimetype] dari Python style
-                // atau object {filename, content, type}
                 if (Array.isArray(att)) {
                     return {
                         filename: att[0],
@@ -443,7 +457,7 @@ const googleService = {
                 }
                 return {
                     filename: att.filename,
-                    content: att.content.toString('base64'), // Pastikan content adalah buffer
+                    content: att.content.toString('base64'),
                     type: att.type || 'application/pdf'
                 };
             });
@@ -457,31 +471,12 @@ const googleService = {
             console.log(`Email sent to ${to}`);
         } catch (error) {
             console.error("Send Email Error:", error);
-            // Jangan throw error agar proses utama tidak berhenti
         }
     },
 
+    // Ini placeholder, logic sesungguhnya ada di controller/pdfService untuk render template
     sendApprovalEmail: async (cabang, jabatanTarget, context) => {
-        // context: { type: 'RAB'/'SPK', data: {}, links: {}, rowIndex: int, customSubject: str }
-        const approverEmails = await googleService.getEmailsByJabatan(cabang, jabatanTarget);
-        if (!approverEmails.length) return;
-
-        // Tentukan URL untuk button di email
-        // Di Vercel, base URL adalah domain aplikasi Anda
-        const baseUrl = "https://instruksi-lapangan.vercel.app"; // Ganti dengan domain Vercel Anda nanti
-        // Tapi logic approval ada di backend
-        const backendUrl = "https://instruksi-lapangan.onrender.com"; // Ganti dengan domain backend Anda
-
-        // Construct URL
-        const approvalUrl = `${backendUrl}/api/handle_${context.type.toLowerCase() === 'spk' ? 'spk' : (context.isRab2 ? 'rab_2' : 'rab')}_approval?action=approve&row=${context.rowIndex}&level=${jabatanTarget === config.JABATAN.KOORDINATOR ? 'coordinator' : 'manager'}&approver=${approverEmails[0]}`;
-        const rejectionUrl = `${backendUrl}/api/reject_form/${context.type.toLowerCase() === 'spk' ? 'spk' : (context.isRab2 ? 'rab_kedua' : 'rab')}?row=${context.rowIndex}&level=${jabatanTarget === config.JABATAN.KOORDINATOR ? 'coordinator' : 'manager'}&approver=${approverEmails[0]}`;
-
-        // Render Template (Kita asumsikan sudah diload/render di controller, tapi bisa juga di sini)
-        // Agar konsisten dengan struktur, kita terima HTML body dari luar atau render sederhana di sini.
-        // Di Controller rabController sudah ada logic render, jadi function ini hanya wrapper sendEmail.
-        // Namun, jika ingin bersih, render harusnya di sini.
-        // Untuk saat ini, kita kembalikan kontrol render ke Controller agar fleksibel.
-        // Fungsi ini hanya mencari email tujuan.
+        /* Logic rendering email ada di controller/service lain yang memanggil sendEmail ini */
     },
 
     // --- 5. SPK & General Helpers ---
@@ -494,17 +489,16 @@ const googleService = {
 
             const spkList = [];
             rows.forEach(row => {
-                if (String(row.get('Cabang')).toLowerCase() === String(cabang).toLowerCase() &&
-                    row.get('Status') === config.STATUS.SPK_APPROVED) {
+                if (String(row['Cabang']).toLowerCase() === String(cabang).toLowerCase() &&
+                    row['Status'] === config.STATUS.SPK_APPROVED) {
                     spkList.push({
-                        "Nomor Ulok": row.get("Nomor Ulok"),
-                        "Lingkup Pekerjaan": row.get("Lingkup Pekerjaan"),
-                        "Link PDF": row.get("Link PDF")
+                        "Nomor Ulok": row["Nomor Ulok"],
+                        "Lingkup Pekerjaan": row["Lingkup Pekerjaan"],
+                        "Link PDF": row["Link PDF"]
                     });
                 }
             });
-            // Reverse list (terbaru dulu) dan unik
-            return spkList.reverse(); // Simplified unique logic needed if duplicates exist
+            return spkList.reverse();
         } catch (error) {
             return [];
         }
@@ -513,20 +507,18 @@ const googleService = {
     getRabUrlByUlok: async (ulok) => {
         try {
             const doc = await getDoc(config.SPREADSHEET_ID);
-            // Cek RAB 1 Approved
             const sheet1 = doc.sheetsByTitle[config.APPROVED_DATA_SHEET_NAME];
             const rows1 = await sheet1.getRows();
-            let found = rows1.reverse().find(r => r.get('Nomor Ulok') === ulok);
+            let found = rows1.reverse().find(r => r["Nomor Ulok"] === ulok);
 
-            if (found) return found.get('Link PDF Non-SBO') || found.get('Link PDF');
+            if (found) return found["Link PDF Non-SBO"] || found["Link PDF"];
 
-            // Cek RAB 2 Approved
             const doc2 = await getDoc(config.SPREADSHEET_ID_RAB_2);
             const sheet2 = doc2.sheetsByTitle[config.APPROVED_DATA_SHEET_NAME_RAB_2];
             const rows2 = await sheet2.getRows();
-            found = rows2.reverse().find(r => r.get('Nomor Ulok') === ulok);
+            found = rows2.reverse().find(r => r["Nomor Ulok"] === ulok);
 
-            if (found) return found.get('Link PDF Non-SBO') || found.get('Link PDF');
+            if (found) return found["Link PDF Non-SBO"] || found["Link PDF"];
 
             return null;
         } catch (e) { return null; }
@@ -538,10 +530,10 @@ const googleService = {
             const sheet = doc.sheetsByTitle[config.SPK_DATA_SHEET_NAME];
             const rows = await sheet.getRows();
             const found = rows.reverse().find(r =>
-                r.get('Nomor Ulok') === ulok &&
-                r.get('Status') === config.STATUS.SPK_APPROVED
+                r["Nomor Ulok"] === ulok &&
+                r['Status'] === config.STATUS.SPK_APPROVED
             );
-            return found ? found.get('Link PDF') : null;
+            return found ? found["Link PDF"] : null;
         } catch (e) { return null; }
     },
 
@@ -553,9 +545,9 @@ const googleService = {
 
             const kontraktor = new Set();
             rows.forEach(row => {
-                if (String(row.get('NAMA CABANG')).toLowerCase() === String(cabang).toLowerCase() &&
-                    String(row.get('STATUS KONTRAKTOR')).toUpperCase() === 'AKTIF') {
-                    kontraktor.add(row.get('NAMA KONTRAKTOR'));
+                if (String(row['NAMA CABANG']).toLowerCase() === String(cabang).toLowerCase() &&
+                    String(row['STATUS KONTRAKTOR']).toUpperCase() === 'AKTIF') {
+                    kontraktor.add(row['NAMA KONTRAKTOR']);
                 }
             });
             return Array.from(kontraktor).sort();
@@ -564,16 +556,19 @@ const googleService = {
 
     getApprovedRabByCabang: async (cabang) => {
         try {
-            // Logic mapping group cabang (Bandung 1 -> Bandung 1 & 2)
-            // Implementasi sederhana, ambil semua dan filter
             const doc = await getDoc(config.SPREADSHEET_ID);
             const sheet = doc.sheetsByTitle[config.APPROVED_DATA_SHEET_NAME];
             const rows = await sheet.getRows();
 
-            // Logic grouping cabang bisa ditambahkan di sini sesuai python
-            const relevantRows = rows.filter(r => String(r.get('Cabang')).toLowerCase().includes(cabang.toLowerCase().split(' ')[0])); // Simplifikasi
+            // Logic filter sederhana
+            const relevantRows = rows.filter(r => String(r['Cabang']).toLowerCase().includes(String(cabang).toLowerCase().split(' ')[0]));
 
-            return relevantRows.map(r => r.toObject());
+            // Convert to object
+            return relevantRows.map(r => {
+                const obj = {};
+                sheet.headerValues.forEach(h => obj[h] = r[h]);
+                return obj;
+            });
         } catch (e) { return []; }
     },
 
@@ -582,9 +577,14 @@ const googleService = {
             const doc = await getDoc(config.SPREADSHEET_ID_RAB_2);
             const sheet = doc.sheetsByTitle[config.APPROVED_DATA_SHEET_NAME_RAB_2];
             const rows = await sheet.getRows();
-            // Filter logic
-            const relevantRows = rows.filter(r => String(r.get('Cabang')).toLowerCase().includes(cabang.toLowerCase().split(' ')[0]));
-            return relevantRows.map(r => r.toObject());
+
+            const relevantRows = rows.filter(r => String(r['Cabang']).toLowerCase().includes(String(cabang).toLowerCase().split(' ')[0]));
+
+            return relevantRows.map(r => {
+                const obj = {};
+                sheet.headerValues.forEach(h => obj[h] = r[h]);
+                return obj;
+            });
         } catch (e) { return []; }
     },
 
@@ -595,15 +595,18 @@ const googleService = {
             const rows = await sheet.getRows();
 
             const foundRow = rows.find(r =>
-                String(r.get('Nomor Ulok')).trim() === String(ulok).trim() &&
-                String(r.get('Lingkup Pekerjaan')).trim().toLowerCase() === String(lingkup).trim().toLowerCase()
+                String(r["Nomor Ulok"]).trim() === String(ulok).trim() &&
+                String(r["Lingkup Pekerjaan"]).trim().toLowerCase() === String(lingkup).trim().toLowerCase()
             );
 
             if (foundRow) {
+                const rowData = {};
+                sheet.headerValues.forEach(h => rowData[h] = foundRow[h]);
+
                 return {
-                    Status: foundRow.get('Status'),
-                    rowIndex: foundRow.rowNumber,
-                    data: foundRow.toObject()
+                    Status: foundRow['Status'],
+                    rowIndex: foundRow.rowIndex,
+                    data: rowData
                 };
             }
             return null;
@@ -617,8 +620,8 @@ const googleService = {
 
         let count = 0;
         rows.forEach(row => {
-            const ts = row.get('Timestamp');
-            if (ts && String(row.get('Cabang')).toLowerCase() === String(cabang).toLowerCase()) {
+            const ts = row['Timestamp'];
+            if (ts && String(row['Cabang']).toLowerCase() === String(cabang).toLowerCase()) {
                 const date = moment(ts);
                 if (date.year() === year && date.month() + 1 === month) {
                     count++;
@@ -649,24 +652,22 @@ const googleService = {
             const doc = await getDoc(config.SPREADSHEET_ID);
             const sheet = doc.sheetsByTitle[config.DATA_ENTRY_SHEET_NAME];
             const rows = await sheet.getRows();
-            const found = rows.find(r => r.get('Nomor Ulok') === ulok);
-            return found ? found.get(config.COLUMN_NAMES.EMAIL_PEMBUAT) : null;
+            const found = rows.find(r => r['Nomor Ulok'] === ulok);
+            return found ? found[config.COLUMN_NAMES.EMAIL_PEMBUAT] : null;
         } catch (e) { return null; }
     },
 
     getActivePengawasanByPic: async (email) => {
         try {
             const doc = await getDoc(config.PENGAWASAN_SPREADSHEET_ID);
-            const sheet = doc.sheetsByTitle(config.PENUGASAN_SHEET_NAME); // Perbaikan: methods google-spreadsheet v3/v4 beda
-            // Jika v3: doc.worksheets[index] / v4: doc.sheetsByTitle[name]
-            // Asumsi v4 sesuai library terbaru
+            const sheet = doc.sheetsByTitle[config.PENUGASAN_SHEET_NAME];
             const rows = await sheet.getRows();
             const projects = [];
             rows.forEach(row => {
-                if (String(row.get('Email_BBS')).trim().toLowerCase() === String(email).trim().toLowerCase()) {
+                if (String(row['Email_BBS']).trim().toLowerCase() === String(email).trim().toLowerCase()) {
                     projects.push({
-                        kode_ulok: row.get('Kode_Ulok'),
-                        cabang: row.get('Cabang')
+                        kode_ulok: row['Kode_Ulok'],
+                        cabang: row['Cabang']
                     });
                 }
             });
@@ -679,8 +680,8 @@ const googleService = {
             const doc = await getDoc(config.PENGAWASAN_SPREADSHEET_ID);
             const sheet = doc.sheetsByTitle[config.PENUGASAN_SHEET_NAME];
             const rows = await sheet.getRows();
-            const found = rows.reverse().find(r => r.get('Kode_Ulok') === ulok);
-            return found ? found.get('Email_BBS') : null;
+            const found = rows.reverse().find(r => r['Kode_Ulok'] === ulok);
+            return found ? found['Email_BBS'] : null;
         } catch (e) { return null; }
     },
 
@@ -691,7 +692,7 @@ const googleService = {
             const event = {
                 'summary': eventData.title,
                 'description': eventData.description,
-                'start': { 'date': eventData.date }, // YYYY-MM-DD for all-day
+                'start': { 'date': eventData.date },
                 'end': { 'date': eventData.date },
                 'attendees': eventData.guests.map(email => ({ email })),
             };
@@ -708,38 +709,9 @@ const googleService = {
     },
 
     // --- 7. Email Helper Khusus ---
-
     sendSpkFinalNotification: async (rowData, pdfLink, approver) => {
-        const cabang = rowData.Cabang;
-        const ulok = rowData['Nomor Ulok'];
-        const proyek = rowData.Proyek;
-
-        // Kumpulkan penerima
-        const bmEmail = approver;
-        const bbmEmail = await googleService.getEmailByJabatan(cabang, config.JABATAN.MANAGER);
-        const kontraktorEmails = await googleService.getEmailsByJabatan(cabang, config.JABATAN.KONTRAKTOR);
-        const makerEmail = rowData['Dibuat Oleh'];
-        const rabCreatorEmail = await googleService.getRabCreatorByUlok(ulok);
-
-        const recipients = new Set([bmEmail, bbmEmail, makerEmail, rabCreatorEmail, ...kontraktorEmails]);
-
-        // Karena konten email sedikit berbeda tiap role (BM vs BBM vs Kontraktor), 
-        // idealnya kirim terpisah. Tapi untuk simplifikasi migrasi:
-        // Kita kirim general info + attachment ke semua unique recipients
-
-        // (Opsional: implementasi loop kirim terpisah sesuai spkController logic Python)
-        // Di sini kita sediakan fungsi generic pengirim
-        const subject = `[DISETUJUI] SPK Proyek ${rowData.Nama_Toko}: ${proyek}`;
-        const body = `<p>SPK untuk proyek <b>${proyek}</b> (${ulok}) telah disetujui.</p><p>Silakan unduh dokumen final: <a href="${pdfLink}">Link PDF</a></p>`;
-
-        // Attachment sudah ada di link, tapi jika mau attach file fisik harus download dulu
-        // Untuk efisiensi serverless, kirim link saja biasanya cukup, atau download & attach
-        // Implementasi controller sebelumnya melakukan attach file buffer.
-
-        // Kita gunakan file buffer yang sudah ada di memori Controller jika memungkinkan,
-        // tapi service ini stateless.
+        /* Akan diimplementasikan di controller masing-masing, atau placeholder */
     },
-
     sendRejectionEmail: async (rowData, reason, approver, type = 'RAB') => {
         const email = rowData[config.COLUMN_NAMES.EMAIL_PEMBUAT] || rowData['Dibuat Oleh'];
         if (!email) return;
@@ -752,6 +724,13 @@ const googleService = {
         `;
 
         await googleService.sendEmail(email, subject, body);
+    },
+
+    // Fungsi ini khusus untuk render email template dengan data
+    sendPengawasanEmail: async (recipients, subject, data) => {
+        const { emailLogicService } = require('./emailLogicService'); // Hindari circular dependency
+        // Render HTML disini atau pass data ke controller
+        // Untuk simplicity, kita anggap controller memanggil sendEmail langsung dengan HTML body
     }
 };
 

@@ -15,7 +15,7 @@
     "dotenv": "^17.2.3",
     "ejs": "^3.1.10",
     "express": "^5.2.1",
-    "google-spreadsheet": "^5.0.2",
+    "google-spreadsheet": "^3.3.0",
     "googleapis": "^167.0.0",
     "moment": "^2.30.1",
     "multer": "^2.0.2",
