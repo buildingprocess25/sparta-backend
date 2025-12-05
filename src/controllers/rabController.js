@@ -237,11 +237,11 @@ const rabController = {
     // --- 3. Cek Status Pengajuan ---
     checkStatus: async (req, res) => {
         try {
-            const { email, cabang, type } = req.query;
+            const { email, cabang } = req.query;
 
             // Tentukan sheet ID berdasarkan tipe (RAB 1 atau RAB 2)
-            const spreadSheetId = (type === 'rab2') ? config.SPREADSHEET_ID_RAB_2 : config.SPREADSHEET_ID;
-            const sheetName = (type === 'rab2') ? config.DATA_ENTRY_SHEET_NAME_RAB_2 : config.DATA_ENTRY_SHEET_NAME;
+            const spreadSheetId = config.SPREADSHEET_ID_RAB_2;
+            const sheetName = config.DATA_ENTRY_SHEET_NAME_RAB_2;
 
             const result = await googleService.checkUserSubmissions(
                 email,
