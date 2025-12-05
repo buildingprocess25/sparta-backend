@@ -1,9 +1,8 @@
-// src/controllers/dataController.js
-const { googleService } = require('../services/googleService');
+const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
 const config = require('../config/config');
 
 // --- Konfigurasi ID Spreadsheet per Cabang ---
-// Disalin dari data_api.py
 const SPREADSHEET_IDS = {
     "ACEH": { "ME": "1KZyh0VVn7dZRyvEm6q7RV4iA5jzg7u2oRTIvSHxeFu0", "SIPIL": "11b_oUEmsjqFkB8CX8uOg8SUjlUpfgjZQq6qN1BtVBm4" },
     "BALARAJA": { "ME": "1FVRlRK1Qop1Q7OlHKsIc14BhRSHn9XH2gLWarxWMON4", "SIPIL": "1nBPJjM17vwO1tTsC2m8VRnnhQQKC_bUEpfFebfib_g0" },
@@ -56,7 +55,7 @@ const SPREADSHEET_IDS = {
 // ID SBO
 const SBO_SPREADSHEET_ID = "11efRx3l6fXn5XLd_HZEQHmFWwQX5vRUIBVgFecCYMXQ";
 
-// Mapping Nama Cabang ke Kode Ulok (untuk SBO)
+// Mapping Nama Cabang ke Kode Ulok
 const BRANCH_TO_ULOK_MAP = {
     "WHC IMAM BONJOL": "7AZ1", "LUWU": "2VZ1", "KARAWANG": "1JZ1", "REMBANG": "2AZ1",
     "BANJARMASIN": "1GZ1", "PARUNG": "1MZ1", "TEGAL": "2PZ1", "GORONTALO": "2SZ1",
@@ -72,83 +71,66 @@ const BRANCH_TO_ULOK_MAP = {
 
 // --- Helper Functions ---
 
-// Parse nilai harga agar bersih dari string 'kontraktor' dll
 const processPriceValue = (rawValue) => {
     const valueStr = String(rawValue).trim().toLowerCase();
     if (valueStr === 'kondisional') return 'Kondisional';
     if (valueStr === 'sbo') return 'SBO';
     if (valueStr.includes('kontraktor')) return 0.0;
 
-    // Hapus koma agar bisa diparse sebagai float
+    // Hapus koma dan karakter non-numeric
     const cleanStr = String(rawValue).replace(/,/g, '').trim();
     const floatVal = parseFloat(cleanStr);
     return isNaN(floatVal) ? 0.0 : floatVal;
 };
 
-// Proses Sheet Utama (Non-SBO)
+// Proses Sheet Utama (Non-SBO) dengan V3 Style
 const processSheet = async (doc, lingkup) => {
     const sheet = doc.sheetsByIndex[0];
-    const rows = await sheet.getRows(); // Mengambil semua baris data
-    await sheet.loadHeaderRow(); // Pastikan header terload (biasanya baris 1)
 
-    // Tapi di data_api.py logika parsingnya manual berdasarkan index baris
-    // karena header sebenarnya ada di baris 16 (Sipil) atau 13 (ME)
-
-    // Kita harus memuat sel secara manual untuk meniru logika Python 'get_all_values()'
-    const allRows = await sheet.getCellsInRange(`A1:M${sheet.rowCount}`); // Ambil range luas
-    // Namun google-spreadsheet v4 lebih mudah pakai loadCells
+    // V3: Load semua cells agar bisa diakses dengan getCell
     await sheet.loadCells();
-
-    const allValues = [];
-    for (let r = 0; r < sheet.rowCount; r++) {
-        const rowVal = [];
-        for (let c = 0; c < sheet.columnCount; c++) {
-            const cell = sheet.getCell(r, c);
-            rowVal.push(cell.value); // atau cell.formattedValue
-        }
-        allValues.push(rowVal);
-    }
 
     const categorizedPrices = {};
     let currentCategory = "Uncategorized";
 
-    const noColIndex = 1; // Kolom B
-    const jenisPekerjaanColIndex = 3; // Kolom D
-    const satColIndex = 4; // Kolom E
+    // Kolom (0-based) sesuai kode Python lama:
+    // B=1 (No), D=3 (Jenis Pekerjaan), E=4 (Satuan)
+    const noColIndex = 1;
+    const jenisPekerjaanColIndex = 3;
+    const satColIndex = 4;
 
-    // Tentukan baris header berdasarkan lingkup
-    const targetHeaderRowIndex = (lingkup === "SIPIL") ? 15 : 12; // 0-based index (16-1 di excel)
+    // Tentukan baris header (0-based)
+    // Sipil baris 16 (index 15), ME baris 13 (index 12)
+    const targetHeaderRowIndex = (lingkup === "SIPIL") ? 15 : 12;
 
-    if (allValues.length <= targetHeaderRowIndex) {
-        throw new Error(`Baris header tidak ditemukan di sheet untuk lingkup ${lingkup}.`);
+    // Cek apakah sheet cukup panjang
+    if (sheet.rowCount <= targetHeaderRowIndex) {
+        throw new Error(`Sheet tidak memiliki cukup baris untuk header ${lingkup}.`);
     }
 
-    const headerRow = allValues[targetHeaderRowIndex].map(v => String(v).trim().toLowerCase());
-
-    // Cari index kolom Material dan Upah secara dinamis
+    // Cari kolom Material dan Upah di baris header
     let materialColIndex = -1;
     let upahColIndex = -1;
 
-    headerRow.forEach((text, index) => {
-        if (text.includes("material")) materialColIndex = index;
-        if (text.includes("upah")) upahColIndex = index;
-    });
+    for (let c = 0; c < sheet.columnCount; c++) {
+        const cellValue = String(sheet.getCell(targetHeaderRowIndex, c).value || "").toLowerCase();
+        if (cellValue.includes("material")) materialColIndex = c;
+        if (cellValue.includes("upah")) upahColIndex = c;
+    }
 
     if (materialColIndex === -1 || upahColIndex === -1) {
         throw new Error("Header 'Material' atau 'Upah' tidak ditemukan.");
     }
 
-    // Loop data mulai setelah header
-    for (let i = targetHeaderRowIndex + 1; i < allValues.length; i++) {
-        const row = allValues[i];
+    // Loop data mulai dari baris setelah header
+    for (let r = targetHeaderRowIndex + 1; r < sheet.rowCount; r++) {
+        // Ambil Jenis Pekerjaan
+        const jenisPekerjaan = String(sheet.getCell(r, jenisPekerjaanColIndex).value || "").trim();
 
-        // Skip jika kolom jenis pekerjaan kosong
-        if (!row[jenisPekerjaanColIndex]) continue;
+        // Skip jika kosong
+        if (!jenisPekerjaan || jenisPekerjaan.toUpperCase() === "JENIS PEKERJAAN") continue;
 
-        const noVal = String(row[noColIndex] || "").trim();
-        const jenisPekerjaan = String(row[jenisPekerjaanColIndex] || "").trim();
-
-        if (!noVal || jenisPekerjaan.toUpperCase() === "JENIS PEKERJAAN") continue;
+        const noVal = String(sheet.getCell(r, noColIndex).value || "").trim();
 
         // Cek apakah ini baris Kategori (Romawi I, II, V, dll)
         if (/^[IVXLCDM]+$/.test(noVal)) {
@@ -159,11 +141,11 @@ const processSheet = async (doc, lingkup) => {
             continue;
         }
 
-        const satuanVal = String(row[satColIndex] || "").trim();
+        const satuanVal = String(sheet.getCell(r, satColIndex).value || "").trim();
         if (!satuanVal) continue;
 
-        const hargaMaterialRaw = row[materialColIndex] || 0;
-        const hargaUpahRaw = row[upahColIndex] || 0;
+        const hargaMaterialRaw = sheet.getCell(r, materialColIndex).value || 0;
+        const hargaUpahRaw = sheet.getCell(r, upahColIndex).value || 0;
 
         const itemData = {
             "Jenis Pekerjaan": jenisPekerjaan,
@@ -175,29 +157,30 @@ const processSheet = async (doc, lingkup) => {
         if (!categorizedPrices[currentCategory]) {
             categorizedPrices[currentCategory] = [];
         }
-        categorizedPrices[currentCategory].append(itemData); // Typo fix: push
         categorizedPrices[currentCategory].push(itemData);
     }
 
     return categorizedPrices;
 };
 
-// Proses Sheet SBO
+// Proses Sheet SBO (Menggunakan getRows di v3)
 const processSboSheet = async (doc, cabangKode, lingkup) => {
     const sheet = doc.sheetsByIndex[0];
-    const rows = await sheet.getRows();
+    const rows = await sheet.getRows(); // V3 mengembalikan array object row
 
     const sboItems = [];
+
     rows.forEach(row => {
-        const rowLingkup = String(row.get("Lingkup_Pekerjaan")).trim().toUpperCase();
-        const rowKodeCabang = String(row.get("Kode Cabang"));
+        // V3: Akses data via properti object langsung (Header di baris 1)
+        const rowLingkup = String(row['Lingkup_Pekerjaan'] || "").trim().toUpperCase();
+        const rowKodeCabang = String(row['Kode Cabang'] || "");
 
         if (rowLingkup === lingkup && rowKodeCabang.includes(cabangKode)) {
             sboItems.push({
-                "Jenis Pekerjaan": row.get("Item Pekerjaan"),
-                "Satuan": row.get("Satuan"),
-                "Harga Material": processPriceValue(row.get("Harga Material")),
-                "Harga Upah": 0.0 // SBO biasanya tidak ada upah terpisah di sini
+                "Jenis Pekerjaan": row['Item Pekerjaan'],
+                "Satuan": row['Satuan'],
+                "Harga Material": processPriceValue(row['Harga Material']),
+                "Harga Upah": 0.0 // SBO Upah 0
             });
         }
     });
@@ -223,41 +206,28 @@ const dataController = {
         const spreadsheetId = SPREADSHEET_IDS[cabangKey][lingkupKey];
 
         try {
-            // 1. Ambil Data Utama
-            // Kita perlu menggunakan service untuk getDoc manual karena logic parsingnya custom
-            // Import getDoc dari service tapi methodnya private, jadi kita pakai workaround 
-            // atau implementasi getDoc sederhana di sini. 
-            // Agar bersih, kita anggap googleService mengekspor helper raw.
-            // *Catatan:* Karena google-spreadsheet butuh auth, kita pakai auth dari googleService
-            // Tapi karena googleService.js tidak mengekspor auth client secara langsung, 
-            // kita gunakan fungsi 'getDoc' publik jika ada, atau buat instance baru disini.
-
-            // Cara terbaik: Panggil method di googleService yang kita tambahkan (misal getRawDoc)
-            // Tapi karena file googleService.js sudah dibuat, kita panggil `getDoc` yang kita buat di sana jika di-export.
-            // *Perbaikan:* Di googleService.js sebelumnya `getDoc` tidak di-export. 
-            // Kita asumsikan kita bisa akses `googleService.getDoc` atau buat logic auth ulang.
-            // Untuk solusi cepat di sini kita import JWT dan buat auth ulang (stateless).
-
-            const { JWT } = require('google-auth-library');
-            const { GoogleSpreadsheet } = require('google-spreadsheet');
-
+            // Autentikasi Manual untuk Spreadsheet Dinamis (V3 Style)
             const serviceAccountAuth = new JWT({
                 email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
                 key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
                 scopes: ['https://www.googleapis.com/auth/spreadsheets']
             });
 
-            const doc = new GoogleSpreadsheet(spreadsheetId, serviceAccountAuth);
+            // 1. Ambil Data Utama
+            const doc = new GoogleSpreadsheet(spreadsheetId);
+            await doc.useServiceAccountAuth(serviceAccountAuth); // Auth V3
             await doc.loadInfo();
 
             const processedData = await processSheet(doc, lingkupKey);
 
-            // 2. Ambil Data SBO (Jika Ada)
+            // 2. Ambil Data SBO (Jika Ada Cabang Code)
             const cabangKode = BRANCH_TO_ULOK_MAP[cabangKey];
             if (cabangKode) {
                 try {
-                    const sboDoc = new GoogleSpreadsheet(SBO_SPREADSHEET_ID, serviceAccountAuth);
+                    const sboDoc = new GoogleSpreadsheet(SBO_SPREADSHEET_ID);
+                    await sboDoc.useServiceAccountAuth(serviceAccountAuth); // Auth V3
                     await sboDoc.loadInfo();
+
                     const sboData = await processSboSheet(sboDoc, cabangKode, lingkupKey);
                     if (sboData) {
                         Object.assign(processedData, sboData);
