@@ -1,5 +1,6 @@
 const { GoogleSpreadsheet } = require('google-spreadsheet');
-const { JWT } = require('google-auth-library');
+// Hapus import JWT karena kita akan biarkan google-spreadsheet yang menanganinya
+// const { JWT } = require('google-auth-library'); 
 const config = require('../config/config');
 
 // --- Konfigurasi ID Spreadsheet per Cabang ---
@@ -206,21 +207,33 @@ const dataController = {
         const spreadsheetId = SPREADSHEET_IDS[cabangKey][lingkupKey];
 
         try {
-            // Autentikasi Manual untuk Spreadsheet Dinamis (V3 Style)
-            const privateKey = process.env.GOOGLE_PRIVATE_KEY
-                ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-                : "";
+            // --- PERBAIKAN AUTH DI SINI ---
 
-            // Autentikasi Manual untuk Spreadsheet Dinamis (V3 Style)
-            const serviceAccountAuth = new JWT({
-                email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-                key: privateKey,
-                scopes: ['https://www.googleapis.com/auth/spreadsheets']
-            });
+            // 1. Cek apakah Env Var ada isinya
+            const envEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+            const envKey = process.env.GOOGLE_PRIVATE_KEY;
+
+            if (!envEmail || !envKey) {
+                // Jika env kosong, langsung lempar error deskriptif, jangan coba auth
+                throw new Error("Credentials Error: GOOGLE_SERVICE_ACCOUNT_EMAIL atau GOOGLE_PRIVATE_KEY tidak ditemukan di Environment Variables.");
+            }
+
+            // 2. Format Key (Replace newline)
+            const privateKey = envKey.replace(/\\n/g, '\n');
+
+            // 3. Buat Object Credentials (V3 Standard)
+            // Jangan pakai new JWT(), langsung object saja. Lebih aman.
+            const creds = {
+                client_email: envEmail, // Perhatikan ini 'client_email', bukan 'email'
+                private_key: privateKey
+            };
 
             // 1. Ambil Data Utama
             const doc = new GoogleSpreadsheet(spreadsheetId);
-            await doc.useServiceAccountAuth(serviceAccountAuth); // Auth V3
+
+            // Gunakan creds object langsung
+            await doc.useServiceAccountAuth(creds);
+
             await doc.loadInfo();
 
             const processedData = await processSheet(doc, lingkupKey);
@@ -230,7 +243,10 @@ const dataController = {
             if (cabangKode) {
                 try {
                     const sboDoc = new GoogleSpreadsheet(SBO_SPREADSHEET_ID);
-                    await sboDoc.useServiceAccountAuth(serviceAccountAuth); // Auth V3
+
+                    // Gunakan creds object yang sama
+                    await sboDoc.useServiceAccountAuth(creds);
+
                     await sboDoc.loadInfo();
 
                     const sboData = await processSboSheet(sboDoc, cabangKode, lingkupKey);
@@ -246,7 +262,8 @@ const dataController = {
 
         } catch (error) {
             console.error("Get Data Error:", error);
-            res.status(500).json({ error: `An internal server error occurred: ${error.message}` });
+            // Tampilkan error.message agar kita tahu apa penyebabnya di response
+            res.status(500).json({ error: `Server Error: ${error.message}` });
         }
     }
 };
