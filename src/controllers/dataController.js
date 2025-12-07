@@ -193,6 +193,8 @@ const dataController = {
     getData: async (req, res) => {
         const { cabang, lingkup } = req.query;
 
+        console.log(`\n--- MULAI REQUEST: ${cabang} - ${lingkup} ---`);
+
         if (!cabang || !lingkup) {
             return res.status(400).json({ error: "Missing 'cabang' or 'lingkup' parameter" });
         }
@@ -205,65 +207,66 @@ const dataController = {
         }
 
         const spreadsheetId = SPREADSHEET_IDS[cabangKey][lingkupKey];
+        const cabangKode = BRANCH_TO_ULOK_MAP[cabangKey];
 
         try {
-            // --- PERBAIKAN AUTH DI SINI ---
-
-            // 1. Cek apakah Env Var ada isinya
             const envEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
             const envKey = process.env.GOOGLE_PRIVATE_KEY;
 
+            // --- DEBUG LOGGING ---
+            console.log("1. Cek Credentials:");
+            console.log("   - Email di Env:", envEmail);
+            console.log("   - Panjang Key:", envKey ? envKey.length : "KOSONG");
+
             if (!envEmail || !envKey) {
-                // Jika env kosong, langsung lempar error deskriptif, jangan coba auth
-                throw new Error("Credentials Error: GOOGLE_SERVICE_ACCOUNT_EMAIL atau GOOGLE_PRIVATE_KEY tidak ditemukan di Environment Variables.");
+                throw new Error("Credentials Error: Env vars kosong.");
             }
 
-            // 2. Format Key (Replace newline)
             const privateKey = envKey.replace(/\\n/g, '\n');
-
-            // 3. Buat Object Credentials (V3 Standard)
-            // Jangan pakai new JWT(), langsung object saja. Lebih aman.
-            const creds = {
-                client_email: envEmail, // Perhatikan ini 'client_email', bukan 'email'
-                private_key: privateKey
-            };
+            const creds = { client_email: envEmail, private_key: privateKey };
 
             // 1. Ambil Data Utama
+            console.log(`2. Mencoba akses Sheet UTAMA (${lingkupKey}):`);
+            console.log(`   - ID: ${spreadsheetId}`);
+
             const doc = new GoogleSpreadsheet(spreadsheetId);
-
-            // Gunakan creds object langsung
             await doc.useServiceAccountAuth(creds);
-
             await doc.loadInfo();
+            console.log("   ✅ Sukses akses Sheet Utama");
 
             const processedData = await processSheet(doc, lingkupKey);
 
-            // 2. Ambil Data SBO (Jika Ada Cabang Code)
-            const cabangKode = BRANCH_TO_ULOK_MAP[cabangKey];
+            // 2. Ambil Data SBO
             if (cabangKode) {
+                console.log("3. Mencoba akses Sheet SBO:");
+                console.log(`   - ID: ${SBO_SPREADSHEET_ID}`);
+
                 try {
                     const sboDoc = new GoogleSpreadsheet(SBO_SPREADSHEET_ID);
-
-                    // Gunakan creds object yang sama
                     await sboDoc.useServiceAccountAuth(creds);
-
                     await sboDoc.loadInfo();
+                    console.log("   ✅ Sukses akses Sheet SBO");
 
                     const sboData = await processSboSheet(sboDoc, cabangKode, lingkupKey);
-                    if (sboData) {
-                        Object.assign(processedData, sboData);
-                    }
+                    if (sboData) Object.assign(processedData, sboData);
                 } catch (e) {
-                    console.warn(`Warning: Gagal ambil SBO data: ${e.message}`);
+                    console.error("   ❌ GAGAL akses Sheet SBO (Cek Permission file ini!)");
+                    console.error("   - Error:", e.message);
+                    // Jangan throw error supaya data utama tetap muncul, cuma warning aja
                 }
+            } else {
+                console.log("3. Skip Sheet SBO (Tidak ada kode cabang)");
             }
 
             res.json(processedData);
 
         } catch (error) {
-            console.error("Get Data Error:", error);
-            // Tampilkan error.message agar kita tahu apa penyebabnya di response
-            res.status(500).json({ error: `Server Error: ${error.message}` });
+            console.error("!!! ERROR FATAL !!!");
+            console.error(error);
+            res.status(500).json({
+                error: `Server Error: ${error.message}`,
+                hint: "Cek log Vercel untuk detail ID spreadsheet yang gagal."
+            });
         }
     }
 };
