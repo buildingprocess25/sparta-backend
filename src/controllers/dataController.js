@@ -88,40 +88,54 @@ const processPriceValue = (rawValue) => {
 const processSheet = async (doc, lingkup) => {
     const sheet = doc.sheetsByIndex[0];
 
+    // ... kode sebelumnya ...
+
     // V3: Load semua cells agar bisa diakses dengan getCell
     await sheet.loadCells();
 
     const categorizedPrices = {};
     let currentCategory = "Uncategorized";
 
-    // Kolom (0-based) sesuai kode Python lama:
-    // B=1 (No), D=3 (Jenis Pekerjaan), E=4 (Satuan)
-    const noColIndex = 1;
-    const jenisPekerjaanColIndex = 3;
-    const satColIndex = 4;
-
-    // Tentukan baris header (0-based)
-    // Sipil baris 16 (index 15), ME baris 13 (index 12)
-    const targetHeaderRowIndex = (lingkup === "SIPIL") ? 15 : 12;
-
-    // Cek apakah sheet cukup panjang
-    if (sheet.rowCount <= targetHeaderRowIndex) {
-        throw new Error(`Sheet tidak memiliki cukup baris untuk header ${lingkup}.`);
-    }
-
-    // Cari kolom Material dan Upah di baris header
+    // --- PERBAIKAN: Cari baris header secara otomatis (Scan 20 baris pertama) ---
+    let targetHeaderRowIndex = -1;
     let materialColIndex = -1;
     let upahColIndex = -1;
 
-    for (let c = 0; c < sheet.columnCount; c++) {
-        const cellValue = String(sheet.getCell(targetHeaderRowIndex, c).value || "").toLowerCase();
-        if (cellValue.includes("material")) materialColIndex = c;
-        if (cellValue.includes("upah")) upahColIndex = c;
+    // Loop baris 0 sampai 19 (Excel baris 1-20) untuk mencari header
+    for (let r = 0; r < 20; r++) {
+        // Cek batas baris sheet
+        if (r >= sheet.rowCount) break;
+
+        // Loop kolom untuk mencari kata kunci
+        for (let c = 0; c < sheet.columnCount; c++) {
+            const val = String(sheet.getCell(r, c).value || "").toLowerCase();
+            if (val.includes("material")) materialColIndex = c;
+            if (val.includes("upah")) upahColIndex = c;
+        }
+
+        // Jika keduanya ditemukan di baris yang sama, kunci baris ini sebagai header
+        if (materialColIndex !== -1 && upahColIndex !== -1) {
+            targetHeaderRowIndex = r;
+            console.log(`   ✅ Header ditemukan di Baris Excel ${r + 1}`);
+            break;
+        } else {
+            // Reset jika cuma ketemu satu, mungkin bukan header yang dimaksud
+            materialColIndex = -1;
+            upahColIndex = -1;
+        }
     }
 
-    if (materialColIndex === -1 || upahColIndex === -1) {
-        throw new Error("Header 'Material' atau 'Upah' tidak ditemukan.");
+    if (targetHeaderRowIndex === -1) {
+        throw new Error("Header 'Material' atau 'Upah' tidak ditemukan di 20 baris pertama.");
     }
+
+    // Kolom statis lainnya (sesuaikan relatif terhadap header jika perlu, atau biarkan default)
+    // Biasanya kolom No, Jenis, Satuan posisinya tetap relatif
+    const noColIndex = 1; // Kolom B
+    const jenisPekerjaanColIndex = 3; // Kolom D
+    const satColIndex = 4; // Kolom E
+
+    // ... lanjutkan dengan loop data (mulai dari targetHeaderRowIndex + 1) ...
 
     // Loop data mulai dari baris setelah header
     for (let r = targetHeaderRowIndex + 1; r < sheet.rowCount; r++) {
