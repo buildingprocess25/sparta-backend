@@ -54,7 +54,7 @@ const SPREADSHEET_IDS = {
 };
 
 // ID SBO
-const SBO_SPREADSHEET_ID = "11efRx3l6fXn5XLd_HZEQHmFWwQX5vRUIBVgFecCYMXQ";
+const SBO_SPREADSHEET_ID = "1fHtVgwFiWMbv-lmtJWB7fWqAL7Wped8BSIni4QnQy7E";
 
 // Mapping Nama Cabang ke Kode Ulok
 const BRANCH_TO_ULOK_MAP = {
