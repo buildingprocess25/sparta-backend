@@ -1307,7 +1307,7 @@ def get_gantt_data():
         return jsonify({
             "status": "success",
             "rab": result['rab'],
-            "filtered_categories": result['filtered_categories']
+            "filtered_categories": result['filtered_categories'],
             "gantt_data": result['gantt']
         }), 200
         
