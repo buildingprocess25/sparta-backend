@@ -1308,6 +1308,7 @@ def get_gantt_data():
             "status": "success",
             "rab": result['rab'],
             "filtered_categories": result['filtered_categories']
+            "gantt_data": result['gantt']
         }), 200
         
     except Exception as e:
