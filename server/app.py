@@ -1949,15 +1949,15 @@ def get_active_projects():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route('/api/name_by_email', methods=['GET'])
-def name_by_email():
+@app.route('/api/user_info_by_email', methods=['GET'])
+def name_dan_cabang_by_email():
     email = request.args.get('email')
     if not email:
         return jsonify({"status": "error", "message": "Parameter email dibutuhkan."}), 400
     try:
-        name = google_provider.get_nama_lengkap_by_email(email)
+        name, cabang = google_provider.get_nama_lengkap_dan_cabang_by_email(email)
         if name:
-            return jsonify({"status": "success", "name": name}), 200
+            return jsonify({"status": "success", "name": name, "cabang": cabang}), 200
         else:
             return jsonify({"status": "error", "message": "Nama tidak ditemukan untuk email tersebut."}), 404
     except Exception as e:
