@@ -1992,6 +1992,22 @@ def get_active_projects():
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+@app.route('/api/name_by_email', methods=['GET'])
+def name_by_email():
+    email = request.args.get('email')
+    if not email:
+        return jsonify({"status": "error", "message": "Parameter email dibutuhkan."}), 400
+    try:
+        name = google_provider.get_nama_lengkap_by_email(email)
+        if name:
+            return jsonify({"status": "success", "name": name}), 200
+        else:
+            return jsonify({"status": "error", "message": "Nama tidak ditemukan untuk email tersebut."}), 404
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok", "message": "Service is alive"}), 200

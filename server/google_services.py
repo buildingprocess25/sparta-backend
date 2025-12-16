@@ -1208,3 +1208,13 @@ class GoogleServiceProvider:
         except Exception as e:
             print(f"Error checking ULOK RAB 2: {e}")
             return {"exists": False, "error": str(e)}
+
+    def get_nama_lengkap_by_email(self, email):
+        try:
+            cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
+            for record in cabang_sheet.get_all_records():
+                if str(record.get('EMAIL_SAT', '')).strip().lower() == email.lower():
+                    return record.get('NAMA LENGKAP', '')
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
+        return None
