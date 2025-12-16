@@ -302,14 +302,54 @@ class GoogleServiceProvider:
                             if cat in found_cats_set:
                                 filtered_categories.append(cat)
 
+            # --- AMBIL DATA GANTT CHART (Jika ada) ---
+            gantt_data = None
+            try:
+                gantt_sheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+                all_gantt_values = gantt_sheet.get_all_values()
+                
+                if all_gantt_values:
+                    gantt_headers = all_gantt_values[0]
+                    gantt_data_rows = all_gantt_values[1:]
+                    
+                    # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan di sheet gantt
+                    try:
+                        gantt_ulok_idx = gantt_headers.index(config.COLUMN_NAMES.LOKASI)
+                        gantt_lingkup_idx = gantt_headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+                    except ValueError:
+                        print("Kolom Nomor Ulok atau Lingkup Pekerjaan tidak ditemukan di Gantt Chart sheet")
+                        gantt_ulok_idx = -1
+                        gantt_lingkup_idx = -1
+                    
+                    if gantt_ulok_idx != -1 and gantt_lingkup_idx != -1:
+                        # Cari row yang cocok (dari bawah untuk mendapatkan data terbaru)
+                        for row_vals in reversed(gantt_data_rows):
+                            if len(row_vals) <= max(gantt_ulok_idx, gantt_lingkup_idx):
+                                continue
+                            
+                            current_ulok = str(row_vals[gantt_ulok_idx]).strip().upper()
+                            current_lingkup = str(row_vals[gantt_lingkup_idx]).strip()
+                            
+                            if current_ulok == target_ulok and current_lingkup.lower() == target_lingkup.lower():
+                                # Mapping ke dictionary
+                                if len(row_vals) < len(gantt_headers):
+                                    row_vals += [''] * (len(gantt_headers) - len(row_vals))
+                                gantt_data = dict(zip(gantt_headers, row_vals))
+                                break
+            except gspread.exceptions.WorksheetNotFound:
+                print(f"Worksheet '{config.GANTT_CHART_SHEET_NAME}' tidak ditemukan")
+            except Exception as gantt_error:
+                print(f"Error getting gantt chart data: {gantt_error}")
+
             return {
                 "rab": rab_data,
-                "filtered_categories": filtered_categories
+                "filtered_categories": filtered_categories,
+                "gantt": gantt_data
             }
 
         except Exception as e:
             print(f"Error getting Gantt data: {e}")
-            return {"rab": None, "filtered_categories": []}
+            return {"rab": None, "filtered_categories": [], "gantt": None}
 
     # get ulok by email pembuat (Buat kontraktor)
     def get_ulok_by_email(self, email):
@@ -340,62 +380,38 @@ class GoogleServiceProvider:
             print(f"Error saat mengambil daftar ulok by email: {e}")
             return []
 
-    # Insert Gantt Chart Data
+    # Insert atau Update Gantt Chart Data
     def insert_gantt_chart_data(self, data_dict):
         """
-        Insert data baru ke sheet GANTT_CHART_SHEET_NAME.
-        data_dict berisi field-field sesuai header sheet.
-        """
-        try:
-            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
-            headers = worksheet.row_values(1)
-            
-            if not headers:
-                return {"success": False, "message": "Header sheet tidak ditemukan"}
-            
-            # Mapping data ke urutan header
-            row_data = [data_dict.get(header, "") for header in headers]
-            
-            # Append row baru
-            worksheet.append_row(row_data)
-            new_row_index = len(worksheet.get_all_values())
-            
-            return {
-                "success": True, 
-                "message": "Data berhasil ditambahkan",
-                "row_index": new_row_index
-            }
-        except Exception as e:
-            print(f"Error insert gantt chart data: {e}")
-            return {"success": False, "message": str(e)}
-
-    # Update Gantt Chart Data by Nomor Ulok dan Lingkup Pekerjaan
-    def update_gantt_chart_data(self, nomor_ulok, lingkup_pekerjaan, data_dict):
-        """
-        Update row di sheet GANTT_CHART_SHEET_NAME berdasarkan Nomor Ulok dan Lingkup Pekerjaan.
-        Hanya update field yang ada di data_dict (tidak kosong).
+        Insert atau Update data ke sheet GANTT_CHART_SHEET_NAME.
+        Cek dulu apakah data sudah ada berdasarkan Nomor Ulok dan Lingkup_Pekerjaan.
+        Jika ada, update field yang dikirim. Jika belum ada, insert baris baru.
         """
         try:
             worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values:
-                return {"success": False, "message": "Sheet kosong"}
+                return {"success": False, "message": "Sheet kosong atau header tidak ditemukan"}
             
             headers = all_values[0]
             data_rows = all_values[1:]
             
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+            
+            # Ambil Nomor Ulok dan Lingkup dari data_dict
+            target_ulok = str(data_dict.get(config.COLUMN_NAMES.LOKASI, "")).strip().upper()
+            target_lingkup = str(data_dict.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "")).strip().lower()
+            
             # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan
             try:
-                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)  # "Nomor Ulok"
-                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)  # "Lingkup_Pekerjaan"
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
             except ValueError:
-                return {"success": False, "message": "Kolom Nomor Ulok atau Lingkup_Pekerjaan tidak ditemukan"}
+                return {"success": False, "message": "Kolom Nomor Ulok atau Lingkup_Pekerjaan tidak ditemukan di header"}
             
-            target_ulok = str(nomor_ulok).strip().upper()
-            target_lingkup = str(lingkup_pekerjaan).strip().lower()
-            
-            # Cari row yang cocok
+            # Cari apakah data sudah ada
             found_row_index = None
             for idx, row in enumerate(data_rows):
                 if len(row) <= max(ulok_idx, lingkup_idx):
@@ -408,36 +424,45 @@ class GoogleServiceProvider:
                     found_row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
                     break
             
-            if found_row_index is None:
+            if found_row_index:
+                # --- UPDATE: Data sudah ada, update field yang dikirim ---
+                updates = []
+                for key, value in data_dict.items():
+                    if key in headers and value is not None and str(value).strip() != "":
+                        col_idx = headers.index(key) + 1  # gspread menggunakan 1-based index
+                        updates.append({
+                            "range": gspread.utils.rowcol_to_a1(found_row_index, col_idx),
+                            "values": [[value]]
+                        })
+                
+                if updates:
+                    worksheet.batch_update(updates)
+                
                 return {
-                    "success": False, 
-                    "message": f"Data dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan"
+                    "success": True, 
+                    "message": "Data berhasil diperbarui",
+                    "row_index": found_row_index,
+                    "action": "update",
+                    "fields_updated": len(updates)
                 }
-            
-            # Update hanya field yang ada di data_dict
-            updates = []
-            for key, value in data_dict.items():
-                if key in headers and value is not None and str(value).strip() != "":
-                    col_idx = headers.index(key) + 1  # gspread menggunakan 1-based index
-                    updates.append({
-                        "range": gspread.utils.rowcol_to_a1(found_row_index, col_idx),
-                        "values": [[value]]
-                    })
-            
-            if updates:
-                # Batch update untuk efisiensi
-                worksheet.batch_update(updates)
-            
-            return {
-                "success": True, 
-                "message": "Data berhasil diupdate",
-                "row_index": found_row_index,
-                "fields_updated": len(updates)
-            }
+            else:
+                # --- INSERT: Data belum ada, tambahkan baris baru ---
+                row_data = [data_dict.get(header, "") for header in headers]
+                worksheet.append_row(row_data)
+                new_row_index = len(worksheet.get_all_values())
+                
+                return {
+                    "success": True, 
+                    "message": "Data berhasil ditambahkan",
+                    "row_index": new_row_index,
+                    "action": "insert"
+                }
+                
         except Exception as e:
-            print(f"Error update gantt chart data: {e}")
+            print(f"Error insert/update gantt chart data: {e}")
             return {"success": False, "message": str(e)}
 
+    
     # akhir gantt chart
 
     def get_user_info_by_cabang(self, cabang):

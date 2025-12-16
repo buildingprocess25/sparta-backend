@@ -1373,50 +1373,6 @@ def insert_gantt_data():
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/api/gantt/update', methods=['PUT', 'PATCH'])
-def update_gantt_data():
-    """
-    Update data di sheet Gantt Chart berdasarkan Nomor Ulok dan Lingkup Pekerjaan.
-    Hanya field yang dikirim (tidak kosong) yang akan diupdate.
-    """
-    data = request.get_json()
-    if not data:
-        return jsonify({"status": "error", "message": "Request body kosong"}), 400
-    
-    # Ambil key untuk pencarian
-    nomor_ulok = data.get(config.COLUMN_NAMES.LOKASI)
-    lingkup = data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
-    
-    if not nomor_ulok or not lingkup:
-        return jsonify({
-            "status": "error", 
-            "message": "Field 'Nomor Ulok' dan 'Lingkup_Pekerjaan' wajib diisi untuk identifikasi row"
-        }), 400
-    
-    try:
-        # Hapus key pencarian dari data yang akan diupdate (opsional, tergantung kebutuhan)
-        # Jika ingin key juga bisa diupdate, jangan hapus
-        update_data = {k: v for k, v in data.items()}
-        
-        result = google_provider.update_gantt_chart_data(nomor_ulok, lingkup, update_data)
-        
-        if result["success"]:
-            return jsonify({
-                "status": "success",
-                "message": result["message"],
-                "row_index": result.get("row_index"),
-                "fields_updated": result.get("fields_updated")
-            }), 200
-        else:
-            return jsonify({
-                "status": "error",
-                "message": result["message"]
-            }), 404
-            
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @app.route('/api/get_spk_status', methods=['GET'])
 def get_spk_status():
