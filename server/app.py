@@ -1330,6 +1330,20 @@ def get_ulok_by_email():
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# Get ulok by Cabang PIC
+
+@app.route('/api/get_ulok_by_cabang_pic', methods=['GET'])
+def get_ulok_by_cabang_pic():
+    cabang = request.args.get('cabang')
+    if not cabang:
+        return jsonify({"error": "Parameter cabang kosong"}), 400
+    try:
+        ulok_list = google_provider.get_ulok_by_cabang_pic(cabang)
+        return jsonify(ulok_list), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/gantt/insert', methods=['POST'])
 def insert_gantt_data():
     """

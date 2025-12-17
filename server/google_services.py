@@ -380,6 +380,31 @@ class GoogleServiceProvider:
             print(f"Error saat mengambil daftar ulok by email: {e}")
             return []
 
+    # Get ulok by Cabang (Buat PIC)
+    def get_ulok_by_cabang_pic(self, cabang):
+        ulok_list = []
+        try:
+            worksheet = self.sheet.worksheet(config.APPROVED_DATA_SHEET_NAME)
+            records = worksheet.get_all_records()
+            for record in records:
+                if str(record.get('Cabang', '')).strip().lower() == cabang.strip().lower():
+                    ulok = str(record.get('Nomor Ulok', '')).strip()
+                    proyek = str(record.get('Proyek', '')).strip()
+                    nama_toko = str(record.get('Nama_Toko', record.get('nama_toko', ''))).strip()
+                    lingkup = str(record.get('Lingkup_Pekerjaan', record.get('Lingkup Pekerjaan', ''))).strip()
+                    if ulok:
+                        label = f"{ulok} - {proyek} ({lingkup}) - {nama_toko}"
+                        ulok_list.append({
+                            "label": label,
+                            "value": ulok + "-" + lingkup,
+                        })
+            unique_ulok = {item['value']: item for item in reversed(ulok_list)}
+            sorted_ulok = sorted(unique_ulok.values(), key=lambda x: x['value'])
+            return sorted_ulok
+        except Exception as e:
+            print(f"Error saat mengambil daftar ulok by cabang PIC: {e}")
+            return []
+
     # Insert atau Update Gantt Chart Data
     def insert_gantt_chart_data(self, data_dict):
         """
