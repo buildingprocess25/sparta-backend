@@ -464,12 +464,21 @@ class GoogleServiceProvider:
                 if updates:
                     worksheet.batch_update(updates)
                 
+                # --- Cek apakah Status = Terkunci, kirim email ke Manager ---
+                email_result = None
+                status_value = str(data_dict.get(config.COLUMN_NAMES.STATUS, "")).strip().lower()
+                if status_value == "terkunci":
+                    cabang = data_dict.get(config.COLUMN_NAMES.CABANG, "")
+                    if cabang:
+                        email_result = self._send_terkunci_email_to_manager(cabang, data_dict)
+                
                 return {
                     "success": True, 
                     "message": "Data berhasil diperbarui",
                     "row_index": found_row_index,
                     "action": "update",
-                    "fields_updated": len(updates)
+                    "fields_updated": len(updates),
+                    "email_notification": email_result
                 }
             else:
                 # --- INSERT: Data belum ada, tambahkan baris baru ---
@@ -477,40 +486,39 @@ class GoogleServiceProvider:
                 worksheet.append_row(row_data)
                 new_row_index = len(worksheet.get_all_values())
                 
+                # --- Cek apakah Status = Terkunci, kirim email ke Manager ---
+                email_result = None
+                status_value = str(data_dict.get(config.COLUMN_NAMES.STATUS, "")).strip().lower()
+                if status_value == "terkunci":
+                    cabang = data_dict.get(config.COLUMN_NAMES.CABANG, "")
+                    if cabang:
+                        email_result = self._send_terkunci_email_to_manager(cabang, data_dict)
+                
                 return {
                     "success": True, 
                     "message": "Data berhasil ditambahkan",
                     "row_index": new_row_index,
-                    "action": "insert"
+                    "action": "insert",
+                    "email_notification": email_result
                 }
                 
         except Exception as e:
             print(f"Error insert/update gantt chart data: {e}")
             return {"success": False, "message": str(e)}
 
-    
-    # akhir gantt chart
-
-    def send_terkunci_notification_to_manager(self, cabang, data_dict):
+    def _send_terkunci_email_to_manager(self, cabang, data_dict):
         """
-        Mengirim email notifikasi ke Manager di cabang tertentu ketika status proyek berubah menjadi 'Terkunci'.
+        Mengirim email notifikasi ke Manager ketika status proyek berubah menjadi 'Terkunci'.
         
         Args:
-            cabang (str): Nama cabang untuk mencari email Manager
-            data_dict (dict): Dictionary berisi informasi proyek dengan keys:
-                - nomor_ulok: Nomor Ulok proyek
-                - nama_toko: Nama toko
-                - proyek: Nama proyek
-                - lingkup_pekerjaan: Lingkup pekerjaan (SIPIL/ME)
-                - alamat: Alamat lokasi (optional)
-                - additional_info: Informasi tambahan (optional)
-                - action_url: URL untuk melihat detail (optional)
+            cabang (str): Nama cabang untuk mencari email Manager di CABANG_SHEET_NAME
+            data_dict (dict): Dictionary berisi informasi proyek
         
         Returns:
-            dict: {"success": bool, "message": str}
+            dict: {"success": bool, "message": str, "manager_email": str}
         """
         try:
-            # Cari email Manager berdasarkan cabang
+            # Cari email Manager berdasarkan cabang dari CABANG_SHEET_NAME
             manager_email = self.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
             
             if not manager_email:
@@ -519,39 +527,42 @@ class GoogleServiceProvider:
                     "message": f"Email Manager untuk cabang '{cabang}' tidak ditemukan"
                 }
             
-            # Setup Jinja2 environment
+            # Setup Jinja2 environment untuk render template
             template_dir = os.path.join(os.path.dirname(__file__), 'templates')
             env = Environment(loader=FileSystemLoader(template_dir))
             template = env.get_template('terkunci_notification_email_template.html')
             
-            # Siapkan data untuk template
+            # Siapkan timestamp WIB
             wib = timezone(timedelta(hours=7))
             current_time = datetime.now(wib).strftime("%d %B %Y, %H:%M WIB")
             
+            # Siapkan data untuk template
             template_data = {
-                "nomor_ulok": data_dict.get("nomor_ulok", data_dict.get(config.COLUMN_NAMES.LOKASI, "-")),
-                "nama_toko": data_dict.get("nama_toko", data_dict.get(config.COLUMN_NAMES.NAMA_TOKO, "-")),
-                "proyek": data_dict.get("proyek", data_dict.get(config.COLUMN_NAMES.PROYEK, "-")),
+                "nomor_ulok": data_dict.get(config.COLUMN_NAMES.LOKASI, "-"),
+                "nama_toko": data_dict.get(config.COLUMN_NAMES.NAMA_TOKO, data_dict.get("nama_toko", "-")),
+                "proyek": data_dict.get(config.COLUMN_NAMES.PROYEK, "-"),
                 "cabang": cabang,
-                "lingkup_pekerjaan": data_dict.get("lingkup_pekerjaan", data_dict.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "-")),
-                "alamat": data_dict.get("alamat", data_dict.get(config.COLUMN_NAMES.ALAMAT, "")),
+                "lingkup_pekerjaan": data_dict.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "-"),
+                "alamat": data_dict.get(config.COLUMN_NAMES.ALAMAT, ""),
                 "additional_info": data_dict.get("additional_info", ""),
                 "action_url": data_dict.get("action_url", ""),
                 "timestamp": current_time
             }
             
-            # Render template
+            # Render template email
             html_body = template.render(**template_data)
             
             # Subject email
             subject = f"🔒 [TERKUNCI] Proyek {template_data['nomor_ulok']} - {template_data['nama_toko']} - Cabang {cabang}"
             
-            # Kirim email
+            # Kirim email ke Manager
             self.send_email(
                 to=manager_email,
                 subject=subject,
                 html_body=html_body
             )
+            
+            print(f"Email notifikasi Terkunci berhasil dikirim ke Manager: {manager_email}")
             
             return {
                 "success": True,
@@ -563,42 +574,9 @@ class GoogleServiceProvider:
             print(f"Error sending terkunci notification to manager: {e}")
             return {"success": False, "message": str(e)}
 
-    def process_status_terkunci(self, cabang, data_dict, sheet_name=None, row_index=None):
-        """
-        Memproses perubahan status menjadi 'Terkunci' dan mengirim notifikasi ke Manager.
-        Fungsi ini bisa dipanggil ketika ada update status dari frontend atau proses lainnya.
-        
-        Args:
-            cabang (str): Nama cabang
-            data_dict (dict): Dictionary berisi informasi proyek
-            sheet_name (str, optional): Nama sheet untuk update status
-            row_index (int, optional): Index baris untuk update status
-        
-        Returns:
-            dict: {"success": bool, "message": str, "email_sent": bool}
-        """
-        try:
-            # Update status di sheet jika sheet_name dan row_index diberikan
-            if sheet_name and row_index:
-                self.update_cell(row_index, config.COLUMN_NAMES.STATUS, "Terkunci")
-            
-            # Kirim notifikasi email ke Manager
-            email_result = self.send_terkunci_notification_to_manager(cabang, data_dict)
-            
-            return {
-                "success": True,
-                "message": "Status berhasil diubah menjadi Terkunci",
-                "email_sent": email_result.get("success", False),
-                "email_details": email_result
-            }
-            
-        except Exception as e:
-            print(f"Error processing status terkunci: {e}")
-            return {
-                "success": False, 
-                "message": str(e),
-                "email_sent": False
-            }
+    
+    # akhir gantt chart
+
 
     def get_user_info_by_cabang(self, cabang):
         pic_list, koordinator_info, manager_info = [], {}, {}
