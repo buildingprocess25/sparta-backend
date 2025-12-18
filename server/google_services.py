@@ -415,6 +415,18 @@ class GoogleServiceProvider:
         """
         try:
             worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            
+            # Ambil Nomor Ulok dan Lingkup dari data_dict
+            target_ulok = str(data_dict.get(config.COLUMN_NAMES.LOKASI, "")).strip().upper()
+            target_lingkup = str(data_dict.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "")).strip().lower()
+            
+            # Validasi: Pastikan target_ulok tidak kosong
+            if not target_ulok:
+                return {"success": False, "message": "Nomor Ulok tidak boleh kosong"}
+            
+            print(f"[GANTT] Processing: Ulok={target_ulok}, Lingkup={target_lingkup}")
+            
+            # Baca data terbaru dari sheet
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -425,10 +437,6 @@ class GoogleServiceProvider:
             
             if not headers:
                 return {"success": False, "message": "Header sheet tidak ditemukan"}
-            
-            # Ambil Nomor Ulok dan Lingkup dari data_dict
-            target_ulok = str(data_dict.get(config.COLUMN_NAMES.LOKASI, "")).strip().upper()
-            target_lingkup = str(data_dict.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "")).strip().lower()
             
             # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan
             try:
@@ -448,21 +456,17 @@ class GoogleServiceProvider:
                 
                 if current_ulok == target_ulok and current_lingkup == target_lingkup:
                     found_row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+                    print(f"[GANTT] Found existing row at index {found_row_index} for Ulok={target_ulok}")
                     break
             
             if found_row_index:
                 # --- UPDATE: Data sudah ada, update field yang dikirim ---
-                updates = []
+                print(f"[GANTT] Updating existing row {found_row_index}")
+                
                 for key, value in data_dict.items():
                     if key in headers and value is not None and str(value).strip() != "":
                         col_idx = headers.index(key) + 1  # gspread menggunakan 1-based index
-                        updates.append({
-                            "range": gspread.utils.rowcol_to_a1(found_row_index, col_idx),
-                            "values": [[value]]
-                        })
-                
-                if updates:
-                    worksheet.batch_update(updates)
+                        worksheet.update_cell(found_row_index, col_idx, value)
                 
                 # --- Cek apakah Status = Terkunci, kirim email ke Manager ---
                 email_result = None
@@ -477,14 +481,19 @@ class GoogleServiceProvider:
                     "message": "Data berhasil diperbarui",
                     "row_index": found_row_index,
                     "action": "update",
-                    "fields_updated": len(updates),
+                    "ulok": target_ulok,
                     "email_notification": email_result
                 }
             else:
                 # --- INSERT: Data belum ada, tambahkan baris baru ---
+                print(f"[GANTT] Inserting new row for Ulok={target_ulok}")
+                
                 row_data = [data_dict.get(header, "") for header in headers]
-                worksheet.append_row(row_data)
+                worksheet.append_row(row_data, value_input_option='USER_ENTERED')
+                
+                # Re-read untuk mendapatkan row index yang benar
                 new_row_index = len(worksheet.get_all_values())
+                print(f"[GANTT] New row inserted at index {new_row_index}")
                 
                 # --- Cek apakah Status = Terkunci, kirim email ke Manager ---
                 email_result = None
@@ -499,11 +508,14 @@ class GoogleServiceProvider:
                     "message": "Data berhasil ditambahkan",
                     "row_index": new_row_index,
                     "action": "insert",
+                    "ulok": target_ulok,
                     "email_notification": email_result
                 }
                 
         except Exception as e:
             print(f"Error insert/update gantt chart data: {e}")
+            import traceback
+            traceback.print_exc()
             return {"success": False, "message": str(e)}
 
     def _send_terkunci_email_to_manager(self, cabang, data_dict):
