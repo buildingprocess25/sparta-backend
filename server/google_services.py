@@ -13,7 +13,6 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime, timezone, timedelta
-# from jinja2 import Environment, FileSystemLoader
 
 import config
 
