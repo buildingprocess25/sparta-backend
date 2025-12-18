@@ -13,6 +13,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime, timezone, timedelta
+from jinja2 import Environment, FileSystemLoader
 
 import config
 
@@ -489,6 +490,115 @@ class GoogleServiceProvider:
 
     
     # akhir gantt chart
+
+    def send_terkunci_notification_to_manager(self, cabang, data_dict):
+        """
+        Mengirim email notifikasi ke Manager di cabang tertentu ketika status proyek berubah menjadi 'Terkunci'.
+        
+        Args:
+            cabang (str): Nama cabang untuk mencari email Manager
+            data_dict (dict): Dictionary berisi informasi proyek dengan keys:
+                - nomor_ulok: Nomor Ulok proyek
+                - nama_toko: Nama toko
+                - proyek: Nama proyek
+                - lingkup_pekerjaan: Lingkup pekerjaan (SIPIL/ME)
+                - alamat: Alamat lokasi (optional)
+                - additional_info: Informasi tambahan (optional)
+                - action_url: URL untuk melihat detail (optional)
+        
+        Returns:
+            dict: {"success": bool, "message": str}
+        """
+        try:
+            # Cari email Manager berdasarkan cabang
+            manager_email = self.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
+            
+            if not manager_email:
+                return {
+                    "success": False, 
+                    "message": f"Email Manager untuk cabang '{cabang}' tidak ditemukan"
+                }
+            
+            # Setup Jinja2 environment
+            template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+            env = Environment(loader=FileSystemLoader(template_dir))
+            template = env.get_template('terkunci_notification_email_template.html')
+            
+            # Siapkan data untuk template
+            wib = timezone(timedelta(hours=7))
+            current_time = datetime.now(wib).strftime("%d %B %Y, %H:%M WIB")
+            
+            template_data = {
+                "nomor_ulok": data_dict.get("nomor_ulok", data_dict.get(config.COLUMN_NAMES.LOKASI, "-")),
+                "nama_toko": data_dict.get("nama_toko", data_dict.get(config.COLUMN_NAMES.NAMA_TOKO, "-")),
+                "proyek": data_dict.get("proyek", data_dict.get(config.COLUMN_NAMES.PROYEK, "-")),
+                "cabang": cabang,
+                "lingkup_pekerjaan": data_dict.get("lingkup_pekerjaan", data_dict.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "-")),
+                "alamat": data_dict.get("alamat", data_dict.get(config.COLUMN_NAMES.ALAMAT, "")),
+                "additional_info": data_dict.get("additional_info", ""),
+                "action_url": data_dict.get("action_url", ""),
+                "timestamp": current_time
+            }
+            
+            # Render template
+            html_body = template.render(**template_data)
+            
+            # Subject email
+            subject = f"🔒 [TERKUNCI] Proyek {template_data['nomor_ulok']} - {template_data['nama_toko']} - Cabang {cabang}"
+            
+            # Kirim email
+            self.send_email(
+                to=manager_email,
+                subject=subject,
+                html_body=html_body
+            )
+            
+            return {
+                "success": True,
+                "message": f"Email notifikasi berhasil dikirim ke Manager ({manager_email})",
+                "manager_email": manager_email
+            }
+            
+        except Exception as e:
+            print(f"Error sending terkunci notification to manager: {e}")
+            return {"success": False, "message": str(e)}
+
+    def process_status_terkunci(self, cabang, data_dict, sheet_name=None, row_index=None):
+        """
+        Memproses perubahan status menjadi 'Terkunci' dan mengirim notifikasi ke Manager.
+        Fungsi ini bisa dipanggil ketika ada update status dari frontend atau proses lainnya.
+        
+        Args:
+            cabang (str): Nama cabang
+            data_dict (dict): Dictionary berisi informasi proyek
+            sheet_name (str, optional): Nama sheet untuk update status
+            row_index (int, optional): Index baris untuk update status
+        
+        Returns:
+            dict: {"success": bool, "message": str, "email_sent": bool}
+        """
+        try:
+            # Update status di sheet jika sheet_name dan row_index diberikan
+            if sheet_name and row_index:
+                self.update_cell(row_index, config.COLUMN_NAMES.STATUS, "Terkunci")
+            
+            # Kirim notifikasi email ke Manager
+            email_result = self.send_terkunci_notification_to_manager(cabang, data_dict)
+            
+            return {
+                "success": True,
+                "message": "Status berhasil diubah menjadi Terkunci",
+                "email_sent": email_result.get("success", False),
+                "email_details": email_result
+            }
+            
+        except Exception as e:
+            print(f"Error processing status terkunci: {e}")
+            return {
+                "success": False, 
+                "message": str(e),
+                "email_sent": False
+            }
 
     def get_user_info_by_cabang(self, cabang):
         pic_list, koordinator_info, manager_info = [], {}, {}

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Notifikasi Status Proyek Terkunci</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            color: #333; 
+            line-height: 1.6; 
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 20px auto; 
+            padding: 30px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            background-color: #ffffff; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header { 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #CE1E10; 
+            margin-bottom: 25px; 
+            text-align: center;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #CE1E10;
+        }
+        .status-badge {
+            display: inline-block;
+            background-color: #FF6B35;
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        .content { 
+            padding: 10px 0; 
+        }
+        .content p { 
+            margin: 12px 0; 
+        }
+        .content strong { 
+            color: #333; 
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #CE1E10;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .info-box p {
+            margin: 8px 0;
+        }
+        .info-label {
+            color: #666;
+            font-size: 13px;
+            display: block;
+            margin-bottom: 3px;
+        }
+        .info-value {
+            color: #333;
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .highlight-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .highlight-box p {
+            margin: 0;
+            color: #856404;
+        }
+        .button-container { 
+            text-align: center; 
+            margin: 30px 0; 
+        }
+        .button { 
+            background-color: #CE1E10; 
+            color: #ffffff !important; 
+            padding: 14px 30px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            font-weight: bold; 
+            display: inline-block; 
+        }
+        .button:hover {
+            background-color: #a51810;
+        }
+        .footer { 
+            font-size: 12px; 
+            color: #888; 
+            text-align: center; 
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #999;
+            text-align: right;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            🔒 Notifikasi Status Proyek Terkunci
+        </div>
+        
+        <div class="content">
+            <p>Yth. Bapak/Ibu Manager,</p>
+            
+            <p>
+                Dengan hormat, kami informasikan bahwa terdapat proyek yang statusnya telah berubah menjadi <span class="status-badge">TERKUNCI</span>.
+            </p>
+            
+            <div class="info-box">
+                <p>
+                    <span class="info-label">Nomor Ulok</span>
+                    <span class="info-value">{{ nomor_ulok }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Nama Toko</span>
+                    <span class="info-value">{{ nama_toko }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Proyek</span>
+                    <span class="info-value">{{ proyek }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Cabang</span>
+                    <span class="info-value">{{ cabang }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Lingkup Pekerjaan</span>
+                    <span class="info-value">{{ lingkup_pekerjaan }}</span>
+                </p>
+                {% if alamat %}
+                <p>
+                    <span class="info-label">Alamat</span>
+                    <span class="info-value">{{ alamat }}</span>
+                </p>
+                {% endif %}
+            </div>
+            
+            <div class="highlight-box">
+                <p>
+                    <strong>⚠️ Perhatian:</strong> Status proyek ini telah dikunci. Mohon untuk meninjau dan mengambil tindakan yang diperlukan.
+                </p>
+            </div>
+            
+            {% if additional_info %}
+            <p>
+                <strong>Informasi Tambahan:</strong><br>
+                {{ additional_info }}
+            </p>
+            {% endif %}
+            
+            {% if action_url %}
+            <div class="button-container">
+                <a href="{{ action_url }}" class="button">Lihat Detail Proyek</a>
+            </div>
+            {% endif %}
+            
+            <div class="timestamp">
+                Waktu Notifikasi: {{ timestamp }}
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Email ini dibuat secara otomatis oleh sistem SPARTA.<br>Mohon untuk tidak membalas email ini.</p>
+        </div>
+    </div>
+</body>
+</html>
