@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Notifikasi Gantt Chart Terkunci</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 30px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            font-size: 24px;
+            font-weight: bold;
+            color: #CE1E10;
+            margin-bottom: 25px;
+            text-align: center;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #CE1E10;
+        }
+
+        .status-badge {
+            display: inline-block;
+            background-color: #28a745;
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+
+        .status-badge.locked {
+            background-color: #FF6B35;
+        }
+
+        .content {
+            padding: 10px 0;
+        }
+
+        .content p {
+            margin: 12px 0;
+        }
+
+        .content strong {
+            color: #333;
+        }
+
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #CE1E10;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .info-box p {
+            margin: 8px 0;
+        }
+
+        .info-label {
+            color: #666;
+            font-size: 13px;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .info-value {
+            color: #333;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .highlight-box {
+            background-color: #d4edda;
+            border: 1px solid #28a745;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .highlight-box p {
+            margin: 0;
+            color: #155724;
+        }
+
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .button {
+            background-color: #CE1E10;
+            color: #ffffff !important;
+            padding: 14px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        .button:hover {
+            background-color: #a51810;
+        }
+
+        .footer {
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: #999;
+            text-align: right;
+            margin-top: 20px;
+        }
+
+        .link-info {
+            background-color: #e7f3ff;
+            border: 1px solid #b6d4fe;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .link-info a {
+            color: #0d6efd;
+            text-decoration: none;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .link-info a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            📊 Notifikasi Gantt Chart Telah Dibuat
+        </div>
+
+        <div class="content">
+            <p>Yth. Bapak/Ibu Manager,</p>
+
+            <p>
+                Dengan hormat, kami informasikan bahwa <strong>Gantt Chart</strong> dengan kode ulok <strong>{{
+                    nomor_ulok }}</strong> telah <span class="status-badge">DIBUAT</span> dan <span
+                    class="status-badge locked">DIKUNCI</span> oleh Kontraktor.
+            </p>
+
+            <div class="info-box">
+                <p>
+                    <span class="info-label">Nomor Ulok</span>
+                    <span class="info-value">{{ nomor_ulok }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Nama Toko</span>
+                    <span class="info-value">{{ nama_toko }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Proyek</span>
+                    <span class="info-value">{{ proyek }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Cabang</span>
+                    <span class="info-value">{{ cabang }}</span>
+                </p>
+                <p>
+                    <span class="info-label">Lingkup Pekerjaan</span>
+                    <span class="info-value">{{ lingkup_pekerjaan }}</span>
+                </p>
+                {% if alamat %}
+                <p>
+                    <span class="info-label">Alamat</span>
+                    <span class="info-value">{{ alamat }}</span>
+                </p>
+                {% endif %}
+            </div>
+
+            <div class="highlight-box">
+                <p>
+                    <strong>✅ Informasi:</strong> Gantt Chart telah selesai dibuat dan dikunci oleh Kontraktor.
+                    Selanjutnya Bapak/Ibu dapat melihat Gantt Chart pada <strong>Menu PIC</strong> atau melalui link
+                    berikut.
+                </p>
+            </div>
+
+            <div class="link-info">
+                <p style="margin: 0 0 10px 0; color: #333;">🔗 Akses Gantt Chart:</p>
+                <a
+                    href="https://sparta-alfamart.vercel.app/gantt/pic/index.html">https://sparta-alfamart.vercel.app/gantt/pic/index.html</a>
+            </div>
+
+            <div class="button-container">
+                <a href="https://sparta-alfamart.vercel.app/gantt/pic/index.html" class="button">Lihat Gantt Chart</a>
+            </div>
+
+            <div class="timestamp">
+                Waktu Notifikasi: {{ timestamp }}
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Email ini dibuat secara otomatis oleh sistem SPARTA.<br>Mohon untuk tidak membalas email ini.</p>
+        </div>
+    </div>
+</body>
+
+</html>

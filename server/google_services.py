@@ -530,7 +530,7 @@ class GoogleServiceProvider:
             # Setup Jinja2 environment untuk render template
             template_dir = os.path.join(os.path.dirname(__file__), 'templates')
             env = Environment(loader=FileSystemLoader(template_dir))
-            template = env.get_template('terkunci_notification_email_template.html')
+            template = env.get_template('gantt_chart_email_template.html')
             
             # Siapkan timestamp WIB
             wib = timezone(timedelta(hours=7))
