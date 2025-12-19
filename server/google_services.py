@@ -429,6 +429,13 @@ class GoogleServiceProvider:
             target_ulok = str(data_dict.get(config.COLUMN_NAMES.LOKASI, "")).strip().upper()
             target_lingkup = str(data_dict.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "")).strip().lower()
             
+            # Validasi: Ulok dan Lingkup harus ada untuk operasi yang benar
+            if not target_ulok:
+                return {"success": False, "message": "Nomor Ulok tidak boleh kosong dalam data yang dikirim"}
+            
+            if not target_lingkup:
+                return {"success": False, "message": "Lingkup Pekerjaan tidak boleh kosong dalam data yang dikirim"}
+            
             # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan
             try:
                 ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
@@ -444,6 +451,10 @@ class GoogleServiceProvider:
                 
                 current_ulok = str(row[ulok_idx]).strip().upper()
                 current_lingkup = str(row[lingkup_idx]).strip().lower()
+                
+                # Skip row yang ulok atau lingkup-nya kosong (data tidak valid untuk matching)
+                if not current_ulok or not current_lingkup:
+                    continue
                 
                 if current_ulok == target_ulok and current_lingkup == target_lingkup:
                     found_row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0

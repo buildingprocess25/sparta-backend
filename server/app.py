@@ -365,7 +365,7 @@ def submit_rab():
                 f"Tidak ada email Koordinator yang ditemukan untuk cabang '{cabang}'."
             )
 
-        base_url = "https://sparta-backend.onrender.com"
+        base_url = "https://sparta-backend.web.id"
         approver_for_link = coordinator_emails[0]
         approval_url = (
             f"{base_url}/api/handle_rab_approval"
@@ -650,7 +650,7 @@ def submit_rab_kedua():
         if not coordinator_emails:
             raise Exception(f"Tidak ada email Koordinator untuk cabang '{cabang}'.")
 
-        base_url = "https://sparta-backend.onrender.com"
+        base_url = "https://sparta-backend.web.id"
         approver_for_link = coordinator_emails[0]
         
         # Arahkan ke handler approval RAB 2
@@ -843,7 +843,7 @@ def handle_rab_approval():
             if manager_email:
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = current_time
-                base_url = "https://sparta-backend.onrender.com"
+                base_url = "https://sparta-backend.web.id"
                 approval_url_manager = f"{base_url}/api/handle_rab_approval?action=approve&row={row}&level=manager&approver={manager_email}"
                 rejection_url_manager = f"{base_url}/api/reject_form/rab?row={row}&level=manager&approver={manager_email}"
                 email_html_manager = render_template('email_template.html', doc_type="RAB", level='Manajer', form_data=row_data, approval_url=approval_url_manager, rejection_url=rejection_url_manager, additional_info=f"Telah disetujui oleh Koordinator: {approver}")
@@ -1014,7 +1014,7 @@ def handle_rab_2_approval():
                 manager_email = google_provider.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
                 
                 if manager_email:
-                    base_url = "https://sparta-backend.onrender.com" 
+                    base_url = "https://sparta-backend.web.id" 
                     approval_url_manager = f"{base_url}/api/handle_rab_2_approval?action=approve&row={row}&level=manager&approver={manager_email}"
                     rejection_url_manager = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={row}&level=manager&approver={manager_email}"
                     
@@ -1555,7 +1555,7 @@ def submit_spk():
         if not branch_manager_email:
             raise Exception(f"Branch Manager email for branch '{cabang}' not found.")
 
-        base_url = "https://sparta-backend.onrender.com"
+        base_url = "https://sparta-backend.web.id"
         approval_url = f"{base_url}/api/handle_spk_approval?action=approve&row={row_to_notify}&approver={branch_manager_email}"
         rejection_url = f"{base_url}/api/reject_form/spk?row={row_to_notify}&approver={branch_manager_email}"
 
