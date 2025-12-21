@@ -9,3 +9,4 @@ google-auth-oauthlib
 python-dotenv
 weasyprint
 num2words
+requests

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +16,7 @@
             margin: 0;
             color: #4b5563;
         }
+
         .card {
             background-color: #ffffff;
             border-radius: 12px;
@@ -23,12 +25,15 @@
             text-align: center;
             max-width: 500px;
             width: 90%;
-            border-top: 5px solid #d9534f; /* Red color for rejection */
+            border-top: 5px solid #d9534f;
+            /* Red color for rejection */
         }
+
         .logo {
             max-width: 180px;
             margin-bottom: 24px;
         }
+
         h1 {
             font-size: 24px;
             font-weight: 600;
@@ -36,11 +41,13 @@
             margin-bottom: 8px;
             color: #1f2937;
         }
+
         p {
             font-size: 16px;
             line-height: 1.6;
             margin-bottom: 24px;
         }
+
         textarea {
             width: 100%;
             padding: 12px;
@@ -52,6 +59,7 @@
             min-height: 120px;
             box-sizing: border-box;
         }
+
         button {
             background-color: #d9534f;
             color: white;
@@ -63,30 +71,40 @@
             cursor: pointer;
             transition: background-color 0.2s;
         }
+
         button:hover {
             background-color: #c9302c;
         }
     </style>
 </head>
+
 <body>
     <div class="card">
         <img src="{{ logo_url }}" alt="Logo Alfamart" class="logo">
-        
+
         <h1>Konfirmasi Penolakan</h1>
-        <p>Silakan berikan alasan mengapa permintaan untuk <strong>{{ item_type }} ({{ item_identifier }})</strong> ditolak.</p>
+        <p>Silakan berikan alasan mengapa permintaan untuk <strong>{{ item_type }} ({{ item_identifier }})</strong>
+            ditolak.</p>
 
         <form action="{{ form_action }}" method="POST">
             <input type="hidden" name="action" value="reject">
             <input type="hidden" name="row" value="{{ row }}">
             <input type="hidden" name="approver" value="{{ approver }}">
+            {% if gas_url %}
+            <input type="hidden" name="gas_url" value="{{ gas_url }}">
+            {% endif %}
+            {% if ulok %}
+            <input type="hidden" name="ulok" value="{{ ulok }}">
+            {% endif %}
             {% if level %}
             <input type="hidden" name="level" value="{{ level }}">
             {% endif %}
 
             <textarea name="reason" placeholder="Tuliskan alasan penolakan di sini..." required></textarea>
-            
+
             <button type="submit">Kirim Penolakan</button>
         </form>
     </div>
 </body>
+
 </html>

@@ -6,6 +6,7 @@ import os
 import traceback
 import json
 import base64
+import requests # Pastikan sudah install: pip install requests
 from flask import Flask, request, jsonify, render_template, url_for
 from dotenv import load_dotenv
 from flask_cors import CORS
@@ -20,19 +21,25 @@ from pengawasan_email_logic import get_email_details, FORM_LINKS
 # Tambahkan import ini di bagian paling atas file app.py jika belum ada
 from werkzeug.utils import secure_filename
 load_dotenv()
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 Megabytes
 CORS(app,
      origins=[
          "http://127.0.0.1:5500",
          "http://localhost:5500",
          "https://building-alfamart.vercel.app",
+         "https://building-alfamart.vercel.app/",
          "https://instruksi-lapangan.vercel.app",
          "https://instruksi-lapangan.vercel.app/",
          "https://gantt-chart-bnm.vercel.app",
          "https://gantt-chart-bnm.vercel.app/",
          "https://sparta-alfamart.vercel.app",
          "https://sparta-alfamart.vercel.app/",
+         "https://frontend-form-virid.vercel.app",
+         "https://frontend-form-virid.vercel.app/",
+         "https://script.google.com"
+
      ],
      methods=["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
      allow_headers=["Content-Type", "Authorization"],
@@ -44,6 +51,114 @@ google_provider = GoogleServiceProvider()
 from data_api import data_bp
 app.register_blueprint(data_bp)
 app.json.sort_keys = False
+
+# --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---
+GAS_URLS = {
+  "input-pic": "https://script.google.com/macros/s/AKfycbzMWfroqPvtZXA1gz5VqdUzJhtyV_q8hWH92gl7JqFct5_dTVI2mcwmDHY6Rac5vmu-ww/exec",
+  "login": "https://script.google.com/macros/s/AKfycbzCWExZ5r__w0viXeC1o5FXerwsqaC8y5XZg_W8zPMozlnLILHOJ1pPT4N-JDOFN6Jy/exec",
+  "h2": "https://script.google.com/macros/s/AKfycbyHaiwKENoWsOEEgj2KHr3LQW-PwfkF-Fob7fgvUV52AusSAWaY8etSmeSZeiotK7Jvhw/exec",
+  "h5": "https://script.google.com/macros/s/AKfycbzVdc7Uz2SFopdbcaWerO5UK7t6PAc7cPJVrV2s45iwe5uFTGtLzLRP7ZLv4T7kWus/exec",
+  "h7": "https://script.google.com/macros/s/AKfycbxI5kdLFj4_45qqN63DZXJQ0Bv5CfSCjMcuMX7xWsaEbURUDhUhtrrfEa0eM8Jsq-sJHQ/exec",
+  "h8": "https://script.google.com/macros/s/AKfycbySrgPzCpyUYhHKCGXrtIWfMtSTdLXdQeonzfoI1ro_R4rIZ9EewKPS4T6vM4ZoQuftUQ/exec",
+  "h10": "https://script.google.com/macros/s/AKfycbzKmUVsDXzoTd39R37lVbkOhBPwuwasJQk2VVnLxD0jmy_yymdWpTPwa8YN87TLLloF8A/exec",
+  "h12": "https://script.google.com/macros/s/AKfycbxwEkg5bSqPqXs2j6xnGqZZ-vU_ao5SpUCs6wlSrj5UOr5KL5UqM2Fjpoev7fyVlv29/exec",
+  "h14": "https://script.google.com/macros/s/AKfycby50bSmRPZv7dizGTP-en9HmJ4wHzVX_aO0iwbXpU_2P6T1dlhENzk6XldL7LdbvaKL_A/exec",
+  "h16": "https://script.google.com/macros/s/AKfycbzSFg-L9Kfu2EjAR2R70c6RE6vm9mFDItGq5JbuFIJhQIJHVcA20fpYlC4xSncpcbYKMA/exec",
+  "h17": "https://script.google.com/macros/s/AKfycbwJdY8vlAbzy8_iEoqTZFyrE_ZlnHjdNy777eVUeOf8sc7aV0V_5bwwbPserG0hMCafnA/exec",
+  "h18": "https://script.google.com/macros/s/AKfycbwRo61WD-mjalS5StjfzpnNA2peTXMXcb6mTAjfrxPU93kmtjYJrp_uecumr3qQPnB4mQ/exec",
+  "h22": "https://script.google.com/macros/s/AKfycbx1TgvEvXqSehwU6h3GVsmuJ49gPs0NsWZ9NsJZUJd7W30Qa97tPBrfKJnSQHV_Fhfr/exec",
+  "h23": "https://script.google.com/macros/s/AKfycbz-XKWo1WEHve_a6KIVNNcgy8ZtlnSNGKTfzsa9CF_La6i88VzFi-kEgOfpT2f6PIc/exec",
+  "h25": "https://script.google.com/macros/s/AKfycbxZ-4vyNXPqcpUyORsJqhBxEKZgBEVMbmmXmLQNoZbmgK1Dxda-MG8l2UQhTEjXw0fhOw/exec",
+  "h28": "https://script.google.com/macros/s/AKfycby3VlggJaznV7GHpp86p_eu8lvEm82uAoh5IVTURdHCprBWFFFh5cg7QnBSMtEVdESf/exec",
+  "h32": "https://script.google.com/macros/s/AKfycbxqGR62PV_X86mFFJpMclgNYtGvkx8gVboONt62ynnFdOr25xKINkelEBdqnrqP7SHN/exec",
+  "h33": "https://script.google.com/macros/s/AKfycbzuYFFG018O54U4nsp6iEtJ4kg57no3Juan22FICwf_VZkpNLjKMW7ZLu3Z_6WoWYsTOA/exec",
+  "h41": "https://script.google.com/macros/s/AKfycbwgIbxOWzUeVwMnzqUsrggqTivg-_mtUXEnNYVKs8aIRlmcJo4JZz5dPlXDYfn4Fbib/exec",
+  "serah_terima": "https://script.google.com/macros/s/AKfycbzYIuPoVoaD6HT7GjmGI2flSKzepirT9KztAX0Qg8vZbaixOBw3yhXe70qea8KCSuogtA/exec",
+  "perpanjangan_spk": "https://script.google.com/macros/s/AKfycbyQRhiyX-zAyIyyHHU8OASCTj9O2tCSmnNesiX9o3q9ipQjKp5Qkx_LN6UmARtWMqJe/exec",
+  "login_perpanjanganspk": "https://script.google.com/macros/s/AKfycbyQRhiyX-zAyIyyHHU8OASCTj9O2tCSmnNesiX9o3q9ipQjKp5Qkx_LN6UmARtWMqJe/exec"
+}
+
+# --- HELPER GENERATOR EMAIL (MIGRASI DARI BACKEND LAMA) ---
+def generate_perpanjangan_email_body(data):
+    # Logika konversi dari template JS 'perpanjangan_spk_notification'
+    status = data.get('status_persetujuan', '').upper()
+    is_approved = status == 'DISETUJUI'
+    is_rejected = status == 'DITOLAK'
+    
+    color = 'green' if is_approved else ('red' if is_rejected else 'black')
+    
+    rejection_link = ""
+    if is_rejected:
+        rejection_link = """
+        <p style="margin-top: 15px;">
+            Silakan ajukan ulang permohonan perpanjangan SPK melalui link berikut:
+            <br/>
+            <a href="https://frontend-form-virid.vercel.app/login-perpanjanganspk.html" target="_blank">Ajukan Ulang Perpanjangan SPK</a>
+        </p>
+        """
+    
+    lampiran_html = ""
+    if data.get('link_lampiran_user') and data.get('link_lampiran_user') != '-':
+        lampiran_html = f'<li><strong>Lampiran Pendukung:</strong> <a href="{data.get("link_lampiran_user")}" target="_blank">Lihat Lampiran</a></li>'
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <p>Pemberitahuan,</p>
+        <p>Permintaan perpanjangan SPK untuk <strong>Nomor Ulok {data.get('nomor_ulok')}</strong> telah direspon.</p>
+        <ul>
+            <li><strong>Status:</strong> <strong style="color:{color};">{status}</strong></li>
+            <li><strong>Ditinjau Oleh:</strong> {data.get('disetujui_oleh', 'N/A')}</li>
+            <li><strong>Waktu Respon:</strong> {data.get('waktu_persetujuan', 'N/A')}</li>
+            {f'<li><strong>Alasan Penolakan:</strong> {data.get("alasan_penolakan")}</li>' if is_rejected else ''}
+            
+            <li style="margin-top: 10px;"><strong>Tanggal SPK Akhir Lama:</strong> {data.get('tanggal_spk_akhir')}</li>
+            <li><strong>Pertambahan Hari:</strong> {data.get('pertambahan_hari')} hari</li>
+            <li><strong>Tanggal SPK Akhir Baru:</strong> {data.get('tanggal_spk_akhir_setelah_perpanjangan')}</li>
+            <li style="margin-top: 10px;"><strong>Dokumen:</strong> <a href="{data.get('link_pdf')}" target="_blank">Lihat PDF</a></li>
+            {lampiran_html}
+        </ul>
+        {rejection_link}
+        <p>Terima kasih.</p>
+    </div>
+    """
+    subject = f"[{status}] Perpanjangan SPK untuk Toko: {data.get('nomor_ulok')}"
+    return subject, html_body
+
+def generate_materai_email_body(data, role='manager'):
+    # Logika konversi dari template JS 'materai_upload'
+    recipients_list = data.get('managerRecipients' if role == 'manager' else 'otherRecipients', [])
+    names = [r.get('name') for r in recipients_list if r.get('name')]
+    sapaan = ", ".join(names) if names else "Tim Terkait"
+    
+    extra_manager_link = ""
+    if role == 'manager':
+        extra_manager_link = """
+        <p style="margin-top: 20px;">
+            Untuk mengisi form selanjutnya (SPK), silakan akses tautan berikut:
+            <br/>
+            📌 <a href="https://building-alfamart.vercel.app/login_spk.html" target="_blank">Isi Form SPK</a>
+        </p>
+        """
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+      <p>Semangat Pagi,</p>
+      <p>Bapak/Ibu <strong>{sapaan}</strong>,</p>
+      <p>Email ini merupakan notifikasi bahwa dokumen materai baru telah diunggah dengan rincian:</p>
+      <ul>
+        <li><strong>Tanggal Upload:</strong> {data.get('tanggal_upload', 'N/A')}</li>
+        <li><strong>Cabang:</strong> {data.get('cabang', 'N/A')}</li>
+        <li><strong>Kode Ulok:</strong> {data.get('ulok', 'N/A')}</li>
+        <li><strong>Lingkup Kerja:</strong> {data.get('lingkup_kerja', 'N/A')}</li>
+      </ul>
+      <p>Silakan lihat dokumen yang diunggah:</p>
+      <p>📄 <a href="{data.get('pdfUrl', '#')}" target="_blank">Lihat Dokumen PDF</a></p>
+      {extra_manager_link}
+      <p>Terima kasih.</p>
+    </div>
+    """
+    subject = f"Dokumen Final RAB Penawaran Termaterai - {data.get('ulok')}"
+    return subject, html_body
 
 def format_ulok(nomor_ulok_raw: str) -> str:
     """Format Nomor Ulok to pattern XXXX-XXXX-XXXX[-R].
@@ -1982,6 +2097,188 @@ def name_dan_cabang_by_email():
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok", "message": "Service is alive"}), 200
+
+# --- ENDPOINT PROXY GAS (MIGRASI DARI BACKEND LAMA) ---
+@app.route('/api/form', methods=['GET', 'POST'])
+def proxy_form():
+    # Ambil form ID dari query param atau body
+    form_id = request.args.get('form') or (request.json.get('form') if request.is_json else None)
+    
+    if not form_id:
+        return jsonify({"error": "Invalid or missing form ID"}), 400
+        
+    form_id = form_id.lower()
+    gas_url = GAS_URLS.get(form_id)
+    
+    if not gas_url:
+        return jsonify({"error": "Invalid or missing form ID mapping"}), 400
+
+    try:
+        if request.method == 'GET':
+            # Forward semua query params kecuali 'form'
+            params = {k: v for k, v in request.args.items() if k != 'form'}
+            response = requests.get(gas_url, params=params)
+            return jsonify(response.json()), response.status_code
+
+        elif request.method == 'POST':
+            # Forward json body kecuali 'form'
+            payload = request.get_json() if request.is_json else {}
+            if 'form' in payload:
+                del payload['form']
+                
+            response = requests.post(gas_url, json=payload, headers={"Content-Type": "application/json"})
+            return jsonify(response.json()), response.status_code
+
+    except Exception as e:
+        print(f"GAS Proxy error: {str(e)}")
+        return jsonify({"error": "Gagal mengakses Google Apps Script", "details": str(e)}), 500
+
+# --- ENDPOINTS APPROVAL PERPANJANGAN SPK (MIGRASI DARI BACKEND LAMA) ---
+
+@app.route('/approval/approve', methods=['GET'])
+def approve_perpanjangan():
+    try:
+        gas_url = request.args.get('gas_url')
+        row = request.args.get('row')
+        approver = request.args.get('approver')
+        ulok = request.args.get('ulok')
+
+        if not gas_url:
+             return render_template("response_page.html", title="Error", message="URL GAS tidak ditemukan.")
+
+        # 1. Panggil GAS untuk proses approval
+        approval_response = requests.get(f"{gas_url}?action=processApproval&row={row}&approver={approver}")
+        approval_data = approval_response.json()
+
+        if approval_data.get('status') != 'success':
+            return render_template("response_page.html", title="Error", message=approval_data.get('message', 'Gagal memproses persetujuan.'))
+
+        # 2. Ambil Info Penerima Email dari GAS
+        recipient_response = requests.get(f"{gas_url}?action=getRecipientInfo&row={row}")
+        final_data = recipient_response.json()
+
+        # [UPDATED] Kirim Email Notifikasi
+        final_data['status_persetujuan'] = 'DISETUJUI' 
+        
+        # Gunakan helper untuk generate subject & body
+        subject, body = generate_perpanjangan_email_body(final_data)
+        
+        # Ambil list email penerima
+        recipients = final_data.get('recipients', [])
+        
+        # Kirim pakai google_provider
+        google_provider.send_email(to=recipients, subject=subject, html_body=body)
+        # 4. Render halaman sukses
+        return render_template("response_page.html", title="Berhasil", message=f"Perpanjangan SPK untuk Ulok {ulok} berhasil DISETUJUI.")
+
+    except Exception as e:
+        print(f"Error processing approval: {str(e)}")
+        return render_template("response_page.html", title="Error", message="Terjadi kesalahan server saat memproses persetujuan.")
+
+
+@app.route('/approval/reject', methods=['GET'])
+def reject_perpanjangan_page():
+    gas_url = request.args.get('gas_url')
+    row = request.args.get('row')
+    approver = request.args.get('approver')
+    ulok = request.args.get('ulok')
+    
+    # Menggunakan template rejection_form.html yang sudah ada di Sparta Backend
+    # Kita perlu sesuaikan parameter yang dikirim agar cocok dengan template
+    return render_template(
+        "rejection_form.html", 
+        form_action="/approval/submit-rejection", # Action mengarah ke endpoint python baru
+        gas_url=gas_url, # Perlu passing hidden field ini di template jika belum ada
+        row=row,
+        approver=approver,
+        ulok=ulok,
+        item_type="Perpanjangan SPK",
+        item_identifier=ulok,
+        logo_url=url_for('static', filename='Alfamart-Emblem.png', _external=True)
+    )
+
+@app.route('/approval/submit-rejection', methods=['POST'])
+def submit_rejection_perpanjangan():
+    try:
+        # Flask menggunakan request.form untuk data dari form HTML
+        gas_url = request.form.get('gas_url') 
+        # Cek: Karena rejection_form.html di Sparta mungkin tidak punya input hidden 'gas_url', 
+        # Anda mungkin perlu menyesuaikan template atau logika ini. 
+        # Asumsi: Jika gas_url tidak ada di form, kita fallback ke default perpanjangan_spk URL
+        if not gas_url:
+            gas_url = GAS_URLS['perpanjangan_spk']
+
+        row = request.form.get('row')
+        approver = request.form.get('approver')
+        ulok = request.form.get('ulok') or request.form.get('item_identifier') # Adaptasi nama field
+        reason = request.form.get('reason')
+
+        # 1. Panggil GAS untuk proses rejection
+        # Gunakan requests, encode params otomatis handle URL encoding
+        payload = {
+            'action': 'processRejection',
+            'row': row,
+            'approver': approver,
+            'reason': reason
+        }
+        rejection_response = requests.get(gas_url, params=payload)
+        rejection_data = rejection_response.json()
+
+        if rejection_data.get('status') != 'success':
+             return render_template("response_page.html", title="Error", message=rejection_data.get('message', 'Gagal memproses penolakan.'))
+
+        # 2. Ambil Info Penerima Email
+        recipient_response = requests.get(f"{gas_url}?action=getRecipientInfo&row={row}")
+        final_data = recipient_response.json()
+
+        # 3. Kirim Email Notifikasi
+        # [UPDATED] Kirim Email Notifikasi
+        final_data['status_persetujuan'] = 'DITOLAK'
+        final_data['alasan_penolakan'] = reason
+        
+        # Gunakan helper
+        subject, body = generate_perpanjangan_email_body(final_data)
+        recipients = final_data.get('recipients', [])
+        
+        google_provider.send_email(to=recipients, subject=subject, html_body=body)
+        return render_template("response_page.html", title="Berhasil", message=f"Perpanjangan SPK untuk Ulok {ulok} berhasil DITOLAK.")
+
+    except Exception as e:
+        print(f"Error processing rejection: {str(e)}")
+        return render_template("response_page.html", title="Error", message="Gagal memproses penolakan.")
+
+# --- ENDPOINT KIRIM EMAIL GENERAL (MIGRASI DARI BACKEND LAMA) ---
+@app.route('/api/send-email', methods=['POST'])
+def send_email_general():
+    try:
+        data = request.get_json()
+        form_type = data.get('formType') # Di JS parameternya 'formType' (di body)
+        
+        # 1. Handle Materai Upload
+        if form_type == 'materai_upload':
+            # Kirim ke Manager
+            manager_recipients = data.get('managerRecipients', [])
+            if manager_recipients:
+                emails = [r['email'] for r in manager_recipients if 'email' in r]
+                subject, body = generate_materai_email_body(data, role='manager')
+                google_provider.send_email(to=emails, subject=subject, html_body=body)
+                
+            # Kirim ke Koordinator/Lainnya
+            other_recipients = data.get('otherRecipients', [])
+            if other_recipients:
+                emails = [r['email'] for r in other_recipients if 'email' in r]
+                subject, body = generate_materai_email_body(data, role='coordinator')
+                google_provider.send_email(to=emails, subject=subject, html_body=body)
+
+            return jsonify({"status": "success", "message": "Email materai berhasil dikirim"}), 200
+
+        # Jika formType tidak dikenali
+        return jsonify({"status": "error", "message": f"Form type '{form_type}' tidak didukung di endpoint ini."}), 400
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5001))

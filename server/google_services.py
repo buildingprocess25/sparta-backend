@@ -1,5 +1,6 @@
 import os.path
 import io
+import re
 import gspread
 import json
 from google.auth.transport.requests import Request
@@ -97,8 +98,29 @@ class GoogleServiceProvider:
                 worksheet.append_row(headers)
 
             row_data = [data_dict.get(header, "") for header in headers]
-            worksheet.append_row(row_data)
-            return True
+            
+            # Gunakan append_row dengan value_input_option dan dapatkan response
+            # untuk mendapatkan row index yang akurat (menghindari race condition)
+            # insert_data_option='INSERT_ROWS' memastikan data ditambahkan sebagai baris baru
+            result = worksheet.append_row(
+                row_data, 
+                value_input_option='USER_ENTERED',
+                insert_data_option='INSERT_ROWS'
+            )
+            
+            # Parse response untuk mendapatkan row number yang sebenarnya
+            try:
+                updated_range = result.get('updates', {}).get('updatedRange', '')
+                if updated_range:
+                    range_part = updated_range.split('!')[-1]
+                    match = re.search(r'[A-Z]+(\d+)', range_part)
+                    if match:
+                        return int(match.group(1))
+            except Exception as e:
+                print(f"Warning: Could not parse row index from append response: {e}")
+            
+            # Fallback ke method lama jika parsing gagal
+            return len(worksheet.get_all_values())
         except Exception as e:
             print(f"Error saat menyimpan ke sheet '{sheet_name}': {e}")
             raise
@@ -484,8 +506,31 @@ class GoogleServiceProvider:
             else:
                 # --- INSERT: Data belum ada, tambahkan baris baru ---
                 row_data = [data_dict.get(header, "") for header in headers]
-                worksheet.append_row(row_data)
-                new_row_index = len(worksheet.get_all_values())
+                
+                # Gunakan append_row dengan value_input_option dan dapatkan response
+                # untuk mendapatkan row index yang akurat (menghindari race condition)
+                # insert_data_option='INSERT_ROWS' memastikan data ditambahkan sebagai baris baru
+                result = worksheet.append_row(
+                    row_data,
+                    value_input_option='USER_ENTERED',
+                    insert_data_option='INSERT_ROWS'
+                )
+                
+                # Parse response untuk mendapatkan row number yang sebenarnya
+                new_row_index = None
+                try:
+                    updated_range = result.get('updates', {}).get('updatedRange', '')
+                    if updated_range:
+                        range_part = updated_range.split('!')[-1]
+                        match = re.search(r'[A-Z]+(\d+)', range_part)
+                        if match:
+                            new_row_index = int(match.group(1))
+                except Exception as e:
+                    print(f"Warning: Could not parse row index from append response: {e}")
+                
+                # Fallback jika parsing gagal
+                if not new_row_index:
+                    new_row_index = len(worksheet.get_all_values())
                 
                 return {
                     "success": True, 
@@ -745,7 +790,33 @@ class GoogleServiceProvider:
         worksheet = self.sheet.worksheet(worksheet_name)
         headers = self.get_sheet_headers(worksheet_name)
         row_data = [data.get(header, "") for header in headers]
-        worksheet.append_row(row_data)
+        
+        # Gunakan append_row dengan value_input_option dan dapatkan response
+        # untuk mendapatkan row index yang akurat (menghindari race condition)
+        # insert_data_option='INSERT_ROWS' memastikan data ditambahkan sebagai baris baru
+        result = worksheet.append_row(
+            row_data, 
+            value_input_option='USER_ENTERED',
+            insert_data_option='INSERT_ROWS'
+        )
+        
+        # Parse response untuk mendapatkan row number yang sebenarnya
+        # Response format: {'updates': {'updatedRange': 'SheetName!A100:XX100', ...}}
+        try:
+            updated_range = result.get('updates', {}).get('updatedRange', '')
+            # Extract row number from range like "Form2!A100:XX100"
+            if updated_range:
+                # Ambil bagian setelah "!" dan sebelum ":"
+                range_part = updated_range.split('!')[-1]  # "A100:XX100"
+                # Ambil angka dari cell pertama
+                import re
+                match = re.search(r'[A-Z]+(\d+)', range_part)
+                if match:
+                    return int(match.group(1))
+        except Exception as e:
+            print(f"Warning: Could not parse row index from append response: {e}")
+        
+        # Fallback ke method lama jika parsing gagal
         return len(worksheet.get_all_values())
 
     def get_row_data(self, row_index):
