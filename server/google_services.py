@@ -864,7 +864,12 @@ class GoogleServiceProvider:
             approved_sheet = self.sheet.worksheet(config.APPROVED_DATA_SHEET_NAME)
             headers = self.get_sheet_headers(config.APPROVED_DATA_SHEET_NAME)
             data_to_append = [row_data.get(header, "") for header in headers]
-            approved_sheet.append_row(data_to_append)
+            # insert_data_option='INSERT_ROWS' memastikan data ditambahkan sebagai baris baru
+            approved_sheet.append_row(
+                data_to_append,
+                value_input_option='USER_ENTERED',
+                insert_data_option='INSERT_ROWS'
+            )
             return True
         except Exception as e:
             print(f"Failed to copy data to approved sheet: {e}")
@@ -884,8 +889,12 @@ class GoogleServiceProvider:
             # 4. Susun data sesuai urutan header
             data_to_append = [row_data.get(header, "") for header in headers]
             
-            # 5. Simpan
-            approved_sheet.append_row(data_to_append)
+            # 5. Simpan - insert_data_option='INSERT_ROWS' memastikan data ditambahkan sebagai baris baru
+            approved_sheet.append_row(
+                data_to_append,
+                value_input_option='USER_ENTERED',
+                insert_data_option='INSERT_ROWS'
+            )
             print("Berhasil menyalin data ke sheet Approved RAB 2")
             return True
         except Exception as e:
