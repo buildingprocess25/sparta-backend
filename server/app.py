@@ -1780,6 +1780,30 @@ def handle_spk_approval():
 
             nomor_ulok_spk = row_data.get('Nomor Ulok')
             cabang = row_data.get('Cabang')
+
+            # --- INSERT DATA KE SUMMARY OPNAME SHEET ---
+            try:
+                opname_data = {
+                    config.COLUMN_NAMES.CABANG: cabang,
+                    config.COLUMN_NAMES.LOKASI: nomor_ulok_spk,
+                    config.COLUMN_NAMES.KODE_TOKO: row_data.get('Kode Toko', row_data.get('kode_toko', '')),
+                    config.COLUMN_NAMES.NAMA_TOKO: row_data.get('Nama_Toko', row_data.get('nama_toko', '')),
+                    config.COLUMN_NAMES.AWAL_SPK: row_data.get('Awal SPK', row_data.get('awal_spk', '')),
+                    config.COLUMN_NAMES.AKHIR_SPK: row_data.get('Akhir SPK', row_data.get('akhir_spk', '')),
+                    config.COLUMN_NAMES.TAMBAH_SPK: row_data.get('Tambah SPK', row_data.get('tambah_spk', '')),
+                    config.COLUMN_NAMES.TANGGAL_SERAH_TERIMA: row_data.get('Tanggal Serah Terima', row_data.get('tanggal_serah_terima', '')),
+                    config.COLUMN_NAMES.TANGGAL_OPNAME_FINAL: row_data.get('Tanggal Opname Final', row_data.get('tanggal_opname_final', ''))
+                }
+                google_provider.append_to_dynamic_sheet(
+                    config.OPNAME_SHEET_ID,
+                    config.SUMMARY_OPNAME_SHEET_NAME,
+                    opname_data
+                )
+                print(f"Data berhasil diinsert ke Summary Opname untuk Ulok: {nomor_ulok_spk}")
+            except Exception as opname_error:
+                print(f"Warning: Gagal insert ke Summary Opname: {opname_error}")
+                # Tidak raise error agar proses approval tetap berjalan
+            # --- END INSERT SUMMARY OPNAME ---
             
             jenis_toko = row_data.get('Jenis_Toko', row_data.get('Proyek', 'N/A'))
             nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))

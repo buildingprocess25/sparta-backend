@@ -13,6 +13,7 @@ KONTRAKTOR_SHEET_ID = "1s95mAc0yXEyDwUDyyOzsDdIqIPEETZkA62_jQQBWXyw"
 PENGAWASAN_SPREADSHEET_ID = "1zy6BBKJwwmSSvFrMZSZG39pf0YgmjXockZNf10_OFLo"
 # ID Folder Google Drive untuk upload file SPK dari form pengawasan
 INPUT_PIC_DRIVE_FOLDER_ID = "1gkGZhOJYVo7zv7sZnUIOYAafL-NbNHf8"
+OPNAME_SHEET_ID = "1ssXGBJ-D4O8JVB1emOBuqcdmBKvdymciVsv7eMaBb64"
 
 # Nama-nama sheet
 DATA_ENTRY_SHEET_NAME = "Form2"
@@ -29,6 +30,8 @@ KONTRAKTOR_SHEET_NAME = "Monitoring Kontraktor"
 INPUT_PIC_SHEET_NAME = "InputPIC"
 PENUGASAN_SHEET_NAME = "Penugasan"
 GANTT_CHART_SHEET_NAME = "gantt_chart"
+
+SUMMARY_OPNAME_SHEET_NAME = "summary_opname"
 
 # Nama sheet dinamis akan ditangani di kode, contoh: "DataH2", "SerahTerima"
 
@@ -57,6 +60,12 @@ class COLUMN_NAMES:
     GRAND_TOTAL_FINAL = "Grand Total Final"
     LINK_PDF_IL = "Link PDF IL"
     NAMA_TOKO = "nama_toko"
+    KODE_TOKO = "kode_toko"
+    AWAL_SPK = "awal_spk"
+    AKHIR_SPK = "akhir_spk"
+    TAMBAH_SPK = "tambah_spk"
+    TANGGAL_SERAH_TERIMA = "tanggal_serah_terima"
+    TANGGAL_OPNAME_FINAL = "tanggal_opname_final"
 
 
 # --- Jabatan & Status ---
