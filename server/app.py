@@ -1504,6 +1504,95 @@ def insert_gantt_data():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route('/api/gantt/day/insert', methods=['POST'])
+def insert_day_gantt_data():
+    """
+    Insert data masif ke sheet Day Gantt Chart.
+    
+    Request body bisa dalam 2 format:
+    
+    Format 1 - List langsung:
+    [
+        {
+            "Nomor Ulok": "asa-asa-sas",
+            "Lingkup_Pekerjaan": "ME",
+            "Kategori": "Persiapan",
+            "h_awal": "19/12/2025",
+            "h_akhir": "21/12/2025"
+        },
+        ...
+    ]
+    
+    Format 2 - Object dengan kategori_data:
+    {
+        "nomor_ulok": "asa-asa-sas",
+        "lingkup_pekerjaan": "ME",
+        "kategori_data": [
+            {"Kategori": "Persiapan", "h_awal": "19/12/2025", "h_akhir": "21/12/2025"},
+            {"Kategori": "Pembersihan", "h_awal": "23/12/2025", "h_akhir": "25/12/2025"},
+            {"Kategori": "Bobokan", "h_awal": "28/12/2025", "h_akhir": "30/12/2025"}
+        ]
+    }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "Request body kosong"}), 400
+    
+    try:
+        # Cek format request
+        if isinstance(data, list):
+            # Format 1: List langsung
+            if len(data) == 0:
+                return jsonify({
+                    "status": "error",
+                    "message": "List data kosong"
+                }), 400
+            
+            result = google_provider.insert_day_gantt_chart_data(data)
+        
+        elif isinstance(data, dict):
+            # Format 2: Object dengan kategori_data
+            nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
+            lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            kategori_data = data.get('kategori_data')
+            
+            if not nomor_ulok or not lingkup_pekerjaan:
+                return jsonify({
+                    "status": "error",
+                    "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi"
+                }), 400
+            
+            if not kategori_data or not isinstance(kategori_data, list):
+                return jsonify({
+                    "status": "error",
+                    "message": "Field 'kategori_data' harus berupa list yang tidak kosong"
+                }), 400
+            
+            result = google_provider.insert_day_gantt_chart_single(nomor_ulok, lingkup_pekerjaan, kategori_data)
+        
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Format request tidak valid. Gunakan list atau object."
+            }), 400
+        
+        if result["success"]:
+            return jsonify({
+                "status": "success",
+                "message": result["message"],
+                "details": result.get("details", {})
+            }), 201
+        else:
+            return jsonify({
+                "status": "error",
+                "message": result["message"]
+            }), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route('/api/get_spk_status', methods=['GET'])
 def get_spk_status():
     ulok = request.args.get('ulok')
@@ -1788,8 +1877,8 @@ def handle_spk_approval():
                     config.COLUMN_NAMES.LOKASI: nomor_ulok_spk,
                     config.COLUMN_NAMES.KODE_TOKO: row_data.get('Kode Toko', row_data.get('kode_toko', '')),
                     config.COLUMN_NAMES.NAMA_TOKO: row_data.get('Nama_Toko', row_data.get('nama_toko', '')),
-                    config.COLUMN_NAMES.AWAL_SPK: row_data.get('Awal SPK', row_data.get('awal_spk', '')),
-                    config.COLUMN_NAMES.AKHIR_SPK: row_data.get('Akhir SPK', row_data.get('akhir_spk', '')),
+                    config.COLUMN_NAMES.AWAL_SPK: row_data.get('Waktu Mulai', row_data.get('awal_spk', '')),
+                    config.COLUMN_NAMES.AKHIR_SPK: row_data.get('Waktu Selesai', row_data.get('akhir_spk', '')),
                     config.COLUMN_NAMES.TAMBAH_SPK: row_data.get('Tambah SPK', row_data.get('tambah_spk', '')),
                     config.COLUMN_NAMES.TANGGAL_SERAH_TERIMA: row_data.get('Tanggal Serah Terima', row_data.get('tanggal_serah_terima', '')),
                     config.COLUMN_NAMES.TANGGAL_OPNAME_FINAL: row_data.get('Tanggal Opname Final', row_data.get('tanggal_opname_final', ''))

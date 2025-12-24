@@ -543,6 +543,231 @@ class GoogleServiceProvider:
             print(f"Error insert/update gantt chart data: {e}")
             return {"success": False, "message": str(e)}
 
+    def insert_day_gantt_chart_data(self, data_list):
+        """
+        Insert atau Update data masif ke sheet DAY_GANTT_CHART_SHEET_NAME.
+        
+        Parameters:
+        -----------
+        data_list : list of dict
+            List berisi data dengan format:
+            [
+                {
+                    "Nomor Ulok": "asa-asa-sas",
+                    "Lingkup_Pekerjaan": "ME",
+                    "Kategori": "Persiapan",
+                    "h_awal": "19/12/2025",
+                    "h_akhir": "21/12/2025"
+                },
+                {
+                    "Nomor Ulok": "asa-asa-sas",
+                    "Lingkup_Pekerjaan": "ME",
+                    "Kategori": "Pembersihan",
+                    "h_awal": "23/12/2025",
+                    "h_akhir": "25/12/2025"
+                },
+                ...
+            ]
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            
+            if not all_values:
+                # Sheet kosong, buat header default
+                default_headers = [
+                    config.COLUMN_NAMES.LOKASI,
+                    config.COLUMN_NAMES.LINGKUP_PEKERJAAN,
+                    "Kategori",
+                    config.COLUMN_NAMES.HARI_AWAL,
+                    config.COLUMN_NAMES.HARI_AKHIR
+                ]
+                worksheet.append_row(default_headers, value_input_option='USER_ENTERED')
+                headers = default_headers
+                data_rows = []
+            else:
+                headers = all_values[0]
+                data_rows = all_values[1:]
+            
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+            
+            # Validasi data_list
+            if not data_list or not isinstance(data_list, list):
+                return {"success": False, "message": "data_list harus berupa list yang tidak kosong"}
+            
+            # Cari index kolom yang diperlukan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                ulok_idx = headers.index("Nomor Ulok") if "Nomor Ulok" in headers else None
+                if ulok_idx is None:
+                    return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan di header"}
+            
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                lingkup_idx = headers.index("Lingkup_Pekerjaan") if "Lingkup_Pekerjaan" in headers else None
+                if lingkup_idx is None:
+                    return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan di header"}
+            
+            try:
+                kategori_idx = headers.index("Kategori")
+            except ValueError:
+                return {"success": False, "message": "Kolom Kategori tidak ditemukan di header"}
+            
+            # Buat dictionary untuk lookup existing data (key: ulok|lingkup|kategori -> row_index)
+            existing_data = {}
+            for idx, row in enumerate(data_rows):
+                if len(row) > max(ulok_idx, lingkup_idx, kategori_idx):
+                    key = f"{str(row[ulok_idx]).strip().upper()}|{str(row[lingkup_idx]).strip().lower()}|{str(row[kategori_idx]).strip().lower()}"
+                    existing_data[key] = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+            
+            # Proses setiap item dalam data_list
+            updates = []
+            inserts = []
+            results = {
+                "updated": 0,
+                "inserted": 0,
+                "errors": []
+            }
+            
+            for item in data_list:
+                # Ambil nilai dari item dengan berbagai kemungkinan nama kolom
+                item_ulok = str(item.get(config.COLUMN_NAMES.LOKASI, item.get("Nomor Ulok", ""))).strip().upper()
+                item_lingkup = str(item.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, item.get("Lingkup_Pekerjaan", ""))).strip().lower()
+                item_kategori = str(item.get("Kategori", "")).strip().lower()
+                item_h_awal = str(item.get(config.COLUMN_NAMES.HARI_AWAL, item.get("h_awal", ""))).strip()
+                item_h_akhir = str(item.get(config.COLUMN_NAMES.HARI_AKHIR, item.get("h_akhir", ""))).strip()
+                
+                # Validasi data wajib
+                if not item_ulok:
+                    results["errors"].append(f"Nomor Ulok kosong untuk kategori: {item_kategori}")
+                    continue
+                if not item_lingkup:
+                    results["errors"].append(f"Lingkup Pekerjaan kosong untuk ulok: {item_ulok}")
+                    continue
+                if not item_kategori:
+                    results["errors"].append(f"Kategori kosong untuk ulok: {item_ulok}")
+                    continue
+                
+                # Buat key untuk lookup
+                lookup_key = f"{item_ulok}|{item_lingkup}|{item_kategori}"
+                
+                if lookup_key in existing_data:
+                    # Data sudah ada, siapkan update
+                    row_index = existing_data[lookup_key]
+                    
+                    # Update h_awal jika ada
+                    if item_h_awal:
+                        try:
+                            h_awal_idx = headers.index(config.COLUMN_NAMES.HARI_AWAL)
+                        except ValueError:
+                            h_awal_idx = headers.index("h_awal") if "h_awal" in headers else None
+                        
+                        if h_awal_idx is not None:
+                            updates.append({
+                                "range": gspread.utils.rowcol_to_a1(row_index, h_awal_idx + 1),
+                                "values": [[item_h_awal]]
+                            })
+                    
+                    # Update h_akhir jika ada
+                    if item_h_akhir:
+                        try:
+                            h_akhir_idx = headers.index(config.COLUMN_NAMES.HARI_AKHIR)
+                        except ValueError:
+                            h_akhir_idx = headers.index("h_akhir") if "h_akhir" in headers else None
+                        
+                        if h_akhir_idx is not None:
+                            updates.append({
+                                "range": gspread.utils.rowcol_to_a1(row_index, h_akhir_idx + 1),
+                                "values": [[item_h_akhir]]
+                            })
+                    
+                    results["updated"] += 1
+                else:
+                    # Data belum ada, siapkan insert
+                    row_data = []
+                    for header in headers:
+                        if header == config.COLUMN_NAMES.LOKASI or header == "Nomor Ulok":
+                            row_data.append(item_ulok)
+                        elif header == config.COLUMN_NAMES.LINGKUP_PEKERJAAN or header == "Lingkup_Pekerjaan":
+                            # Simpan dengan format asli (bukan lowercase)
+                            row_data.append(item.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, item.get("Lingkup_Pekerjaan", "")))
+                        elif header == "Kategori":
+                            # Simpan dengan format asli (bukan lowercase)
+                            row_data.append(item.get("Kategori", ""))
+                        elif header == config.COLUMN_NAMES.HARI_AWAL or header == "h_awal":
+                            row_data.append(item_h_awal)
+                        elif header == config.COLUMN_NAMES.HARI_AKHIR or header == "h_akhir":
+                            row_data.append(item_h_akhir)
+                        else:
+                            row_data.append(item.get(header, ""))
+                    
+                    inserts.append(row_data)
+                    results["inserted"] += 1
+                    
+                    # Tambahkan ke existing_data untuk menghindari duplicate dalam batch yang sama
+                    existing_data[lookup_key] = len(data_rows) + len(inserts) + 1
+            
+            # Eksekusi batch update jika ada
+            if updates:
+                worksheet.batch_update(updates)
+            
+            # Eksekusi batch insert jika ada
+            if inserts:
+                # Gunakan batch append untuk efisiensi
+                worksheet.append_rows(inserts, value_input_option='USER_ENTERED')
+            
+            return {
+                "success": True,
+                "message": f"Berhasil memproses {results['updated']} update dan {results['inserted']} insert",
+                "details": results
+            }
+            
+        except Exception as e:
+            print(f"Error insert/update day gantt chart data: {e}")
+            return {"success": False, "message": str(e)}
+
+    def insert_day_gantt_chart_single(self, nomor_ulok, lingkup_pekerjaan, kategori_data):
+        """
+        Insert atau Update data untuk satu Nomor Ulok dengan multiple kategori.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok (contoh: "asa-asa-sas")
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan (contoh: "ME" atau "SIPIL")
+        kategori_data : list of dict
+            List kategori dengan h_awal dan h_akhir:
+            [
+                {"Kategori": "Persiapan", "h_awal": "19/12/2025", "h_akhir": "21/12/2025"},
+                {"Kategori": "Pembersihan", "h_awal": "23/12/2025", "h_akhir": "25/12/2025"},
+                {"Kategori": "Bobokan", "h_awal": "28/12/2025", "h_akhir": "30/12/2025"}
+            ]
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        # Konversi ke format data_list
+        data_list = []
+        for item in kategori_data:
+            data_list.append({
+                config.COLUMN_NAMES.LOKASI: nomor_ulok,
+                config.COLUMN_NAMES.LINGKUP_PEKERJAAN: lingkup_pekerjaan,
+                "Kategori": item.get("Kategori", ""),
+                config.COLUMN_NAMES.HARI_AWAL: item.get("h_awal", item.get(config.COLUMN_NAMES.HARI_AWAL, "")),
+                config.COLUMN_NAMES.HARI_AKHIR: item.get("h_akhir", item.get(config.COLUMN_NAMES.HARI_AKHIR, ""))
+            })
+        
+        return self.insert_day_gantt_chart_data(data_list)
+
     
     # akhir gantt chart
 

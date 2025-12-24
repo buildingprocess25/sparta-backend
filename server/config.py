@@ -30,6 +30,7 @@ KONTRAKTOR_SHEET_NAME = "Monitoring Kontraktor"
 INPUT_PIC_SHEET_NAME = "InputPIC"
 PENUGASAN_SHEET_NAME = "Penugasan"
 GANTT_CHART_SHEET_NAME = "gantt_chart"
+DAY_GANTT_CHART_SHEET_NAME = "day_gantt_chart"
 
 SUMMARY_OPNAME_SHEET_NAME = "summary_opname"
 
@@ -66,6 +67,8 @@ class COLUMN_NAMES:
     TAMBAH_SPK = "tambah_spk"
     TANGGAL_SERAH_TERIMA = "tanggal_serah_terima"
     TANGGAL_OPNAME_FINAL = "tanggal_opname_final"
+    HARI_AWAL = "h_awal"
+    HARI_AKHIR = "h_akhir"
 
 
 # --- Jabatan & Status ---
