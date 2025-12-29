@@ -545,33 +545,9 @@ class GoogleServiceProvider:
 
     def insert_day_gantt_chart_data(self, data_list):
         """
-        Insert atau Update data masif ke sheet DAY_GANTT_CHART_SHEET_NAME.
-        
-        Parameters:
-        -----------
-        data_list : list of dict
-            List berisi data dengan format:
-            [
-                {
-                    "Nomor Ulok": "asa-asa-sas",
-                    "Lingkup_Pekerjaan": "ME",
-                    "Kategori": "Persiapan",
-                    "h_awal": "19/12/2025",
-                    "h_akhir": "21/12/2025"
-                },
-                {
-                    "Nomor Ulok": "asa-asa-sas",
-                    "Lingkup_Pekerjaan": "ME",
-                    "Kategori": "Pembersihan",
-                    "h_awal": "23/12/2025",
-                    "h_akhir": "25/12/2025"
-                },
-                ...
-            ]
-        
-        Returns:
-        --------
-        dict: Hasil operasi dengan status dan detail
+        FIXED: Support Multi-Range per Kategori.
+        Logic Update: Menggunakan list of indices untuk existing_data, bukan single index.
+        Ini memungkinkan satu kategori memiliki banyak baris (range tanggal berbeda).
         """
         try:
             worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
@@ -620,12 +596,17 @@ class GoogleServiceProvider:
             except ValueError:
                 return {"success": False, "message": "Kolom Kategori tidak ditemukan di header"}
             
-            # Buat dictionary untuk lookup existing data (key: ulok|lingkup|kategori -> row_index)
+            # --- PERBAIKAN DI SINI ---
+            # Buat dictionary map Key -> LIST of Row Indices (bukan single int)
+            # Contoh: "ULOK1|ME|Instalasi" -> [5, 8, 12] (Instalasi ada di baris 5, 8, dan 12)
             existing_data = {}
             for idx, row in enumerate(data_rows):
                 if len(row) > max(ulok_idx, lingkup_idx, kategori_idx):
                     key = f"{str(row[ulok_idx]).strip().upper()}|{str(row[lingkup_idx]).strip().lower()}|{str(row[kategori_idx]).strip().lower()}"
-                    existing_data[key] = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+                    
+                    if key not in existing_data:
+                        existing_data[key] = []
+                    existing_data[key].append(idx + 2)  # +2 (Header + 0-index)
             
             # Proses setiap item dalam data_list
             updates = []
@@ -637,32 +618,24 @@ class GoogleServiceProvider:
             }
             
             for item in data_list:
-                # Ambil nilai dari item dengan berbagai kemungkinan nama kolom
                 item_ulok = str(item.get(config.COLUMN_NAMES.LOKASI, item.get("Nomor Ulok", ""))).strip().upper()
                 item_lingkup = str(item.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, item.get("Lingkup_Pekerjaan", ""))).strip().lower()
                 item_kategori = str(item.get("Kategori", "")).strip().lower()
                 item_h_awal = str(item.get(config.COLUMN_NAMES.HARI_AWAL, item.get("h_awal", ""))).strip()
                 item_h_akhir = str(item.get(config.COLUMN_NAMES.HARI_AKHIR, item.get("h_akhir", ""))).strip()
                 
-                # Validasi data wajib
-                if not item_ulok:
-                    results["errors"].append(f"Nomor Ulok kosong untuk kategori: {item_kategori}")
-                    continue
-                if not item_lingkup:
-                    results["errors"].append(f"Lingkup Pekerjaan kosong untuk ulok: {item_ulok}")
-                    continue
-                if not item_kategori:
-                    results["errors"].append(f"Kategori kosong untuk ulok: {item_ulok}")
+                if not item_ulok or not item_lingkup or not item_kategori:
                     continue
                 
-                # Buat key untuk lookup
                 lookup_key = f"{item_ulok}|{item_lingkup}|{item_kategori}"
                 
-                if lookup_key in existing_data:
-                    # Data sudah ada, siapkan update
-                    row_index = existing_data[lookup_key]
+                # Cek apakah ada slot baris tersedia untuk update
+                # Kita gunakan .pop(0) untuk mengambil baris pertama yang tersedia, lalu menghapusnya dari list
+                # sehingga input range kedua akan mengambil baris berikutnya (jika ada) atau insert baru.
+                if lookup_key in existing_data and len(existing_data[lookup_key]) > 0:
+                    # UPDATE: Pakai slot baris yang ada
+                    row_index = existing_data[lookup_key].pop(0)
                     
-                    # Update h_awal jika ada
                     if item_h_awal:
                         try:
                             h_awal_idx = headers.index(config.COLUMN_NAMES.HARI_AWAL)
@@ -675,7 +648,6 @@ class GoogleServiceProvider:
                                 "values": [[item_h_awal]]
                             })
                     
-                    # Update h_akhir jika ada
                     if item_h_akhir:
                         try:
                             h_akhir_idx = headers.index(config.COLUMN_NAMES.HARI_AKHIR)
@@ -690,16 +662,14 @@ class GoogleServiceProvider:
                     
                     results["updated"] += 1
                 else:
-                    # Data belum ada, siapkan insert
+                    # INSERT: Data baru atau slot update habis
                     row_data = []
                     for header in headers:
                         if header == config.COLUMN_NAMES.LOKASI or header == "Nomor Ulok":
                             row_data.append(item_ulok)
                         elif header == config.COLUMN_NAMES.LINGKUP_PEKERJAAN or header == "Lingkup_Pekerjaan":
-                            # Simpan dengan format asli (bukan lowercase)
                             row_data.append(item.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, item.get("Lingkup_Pekerjaan", "")))
                         elif header == "Kategori":
-                            # Simpan dengan format asli (bukan lowercase)
                             row_data.append(item.get("Kategori", ""))
                         elif header == config.COLUMN_NAMES.HARI_AWAL or header == "h_awal":
                             row_data.append(item_h_awal)
@@ -711,28 +681,25 @@ class GoogleServiceProvider:
                     inserts.append(row_data)
                     results["inserted"] += 1
                     
-                    # Tambahkan ke existing_data untuk menghindari duplicate dalam batch yang sama
-                    existing_data[lookup_key] = len(data_rows) + len(inserts) + 1
+                    # Kita TIDAK menambahkan ke existing_data di sini
+                    # Karena insert baru akan dilakukan di akhir (append), bukan update di tempat.
             
-            # Eksekusi batch update jika ada
             if updates:
                 worksheet.batch_update(updates)
             
-            # Eksekusi batch insert jika ada
             if inserts:
-                # Gunakan batch append untuk efisiensi
                 worksheet.append_rows(inserts, value_input_option='USER_ENTERED')
             
             return {
                 "success": True,
-                "message": f"Berhasil memproses {results['updated']} update dan {results['inserted']} insert",
+                "message": f"Berhasil: {results['updated']} update, {results['inserted']} insert baru.",
                 "details": results
             }
             
         except Exception as e:
             print(f"Error insert/update day gantt chart data: {e}")
             return {"success": False, "message": str(e)}
-
+        
     def insert_day_gantt_chart_single(self, nomor_ulok, lingkup_pekerjaan, kategori_data):
         """
         Insert atau Update data untuk satu Nomor Ulok dengan multiple kategori.
