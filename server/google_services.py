@@ -363,15 +363,54 @@ class GoogleServiceProvider:
             except Exception as gantt_error:
                 print(f"Error getting gantt chart data: {gantt_error}")
 
+            # --- AMBIL DATA DAY GANTT CHART (Jika ada) ---
+            day_gantt_data = []
+            try:
+                day_gantt_sheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+                all_day_gantt_values = day_gantt_sheet.get_all_values()
+                
+                if all_day_gantt_values:
+                    day_gantt_headers = all_day_gantt_values[0]
+                    day_gantt_data_rows = all_day_gantt_values[1:]
+                    
+                    # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan di sheet day_gantt
+                    try:
+                        day_gantt_ulok_idx = day_gantt_headers.index(config.COLUMN_NAMES.LOKASI)
+                        day_gantt_lingkup_idx = day_gantt_headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+                    except ValueError:
+                        print("Kolom Nomor Ulok atau Lingkup Pekerjaan tidak ditemukan di Day Gantt Chart sheet")
+                        day_gantt_ulok_idx = -1
+                        day_gantt_lingkup_idx = -1
+                    
+                    if day_gantt_ulok_idx != -1 and day_gantt_lingkup_idx != -1:
+                        # Cari semua row yang cocok (satu ulok+lingkup bisa punya banyak kategori/range)
+                        for row_vals in day_gantt_data_rows:
+                            if len(row_vals) <= max(day_gantt_ulok_idx, day_gantt_lingkup_idx):
+                                continue
+                            
+                            current_ulok = str(row_vals[day_gantt_ulok_idx]).strip().upper()
+                            current_lingkup = str(row_vals[day_gantt_lingkup_idx]).strip()
+                            
+                            if current_ulok == target_ulok and current_lingkup.lower() == target_lingkup.lower():
+                                # Mapping ke dictionary
+                                if len(row_vals) < len(day_gantt_headers):
+                                    row_vals += [''] * (len(day_gantt_headers) - len(row_vals))
+                                day_gantt_data.append(dict(zip(day_gantt_headers, row_vals)))
+            except gspread.exceptions.WorksheetNotFound:
+                print(f"Worksheet '{config.DAY_GANTT_CHART_SHEET_NAME}' tidak ditemukan")
+            except Exception as day_gantt_error:
+                print(f"Error getting day gantt chart data: {day_gantt_error}")
+
             return {
                 "rab": rab_data,
                 "filtered_categories": filtered_categories,
-                "gantt": gantt_data
+                "gantt": gantt_data,
+                "day_gantt": day_gantt_data
             }
 
         except Exception as e:
             print(f"Error getting Gantt data: {e}")
-            return {"rab": None, "filtered_categories": [], "gantt": None}
+            return {"rab": None, "filtered_categories": [], "gantt": None, "day_gantt": []}
 
     # get ulok by email pembuat (Buat kontraktor)
     def get_ulok_by_email(self, email):
