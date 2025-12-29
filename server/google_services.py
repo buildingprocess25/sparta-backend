@@ -240,8 +240,8 @@ class GoogleServiceProvider:
             target_ulok = str(kode_ulok).strip().upper()
             target_lingkup = str(lingkup_pekerjaan).strip()
             
-            # --- AMBIL DATA RAB FORM 3 (APPROVED) ---
-            rab_sheet = self.sheet.worksheet(config.APPROVED_DATA_SHEET_NAME) # Form3
+            # --- AMBIL DATA RAB FORM 2 ---
+            rab_sheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME) # Form2
             all_rab_values = rab_sheet.get_all_values()
             filtered_categories = []
             rab_data = None
