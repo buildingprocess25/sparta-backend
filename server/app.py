@@ -1594,6 +1594,148 @@ def insert_day_gantt_data():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route('/api/gantt/pengawasan/insert', methods=['POST'])
+def insert_pengawasan_to_gantt():
+    """
+    Insert data Pengawasan (angka hari) ke kolom Pengawasan_1 s/d Pengawasan_10 secara berurutan.
+    Cari baris berdasarkan Nomor Ulok dan Lingkup_Pekerjaan, lalu insert ke kolom Pengawasan 
+    yang pertama masih kosong.
+    
+    Request body:
+    {
+        "nomor_ulok": "Z001-2512-TEST",
+        "lingkup_pekerjaan": "SIPIL",
+        "pengawasan_day": 5
+    }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "Request body kosong"}), 400
+    
+    nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
+    lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+    pengawasan_day = data.get('pengawasan_day')
+    
+    if not nomor_ulok:
+        return jsonify({
+            "status": "error",
+            "message": "Field 'nomor_ulok' wajib diisi"
+        }), 400
+    
+    if not lingkup_pekerjaan:
+        return jsonify({
+            "status": "error",
+            "message": "Field 'lingkup_pekerjaan' wajib diisi"
+        }), 400
+    
+    if pengawasan_day is None:
+        return jsonify({
+            "status": "error",
+            "message": "Field 'pengawasan_day' wajib diisi"
+        }), 400
+    
+    try:
+        result = google_provider.insert_pengawasan_to_gantt_chart(
+            nomor_ulok, 
+            lingkup_pekerjaan, 
+            pengawasan_day
+        )
+        
+        if result["success"]:
+            return jsonify({
+                "status": "success",
+                "message": result["message"],
+                "row_index": result.get("row_index"),
+                "column_name": result.get("column_name"),
+                "value": result.get("value")
+            }), 200
+        else:
+            return jsonify({
+                "status": "error",
+                "message": result["message"]
+            }), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/gantt/day/keterlambatan', methods=['POST'])
+def update_keterlambatan_day_gantt():
+    """
+    Insert atau Update kolom keterlambatan di sheet day_gantt_chart.
+    Cari baris berdasarkan Nomor Ulok, Lingkup_Pekerjaan, Kategori, h_awal, dan h_akhir.
+    Jika ditemukan, update kolom keterlambatan. Jika tidak, insert baris baru.
+    
+    Request body:
+    {
+        "nomor_ulok": "Z001-2512-TEST",
+        "lingkup_pekerjaan": "ME",
+        "kategori": "INSTALASI",
+        "h_awal": "29/12/2025",
+        "h_akhir": "31/12/2025",
+        "keterlambatan": 3
+    }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "Request body kosong"}), 400
+    
+    nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
+    lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+    kategori = data.get('kategori') or data.get('Kategori')
+    h_awal = data.get('h_awal') or data.get(config.COLUMN_NAMES.HARI_AWAL)
+    h_akhir = data.get('h_akhir') or data.get(config.COLUMN_NAMES.HARI_AKHIR)
+    keterlambatan = data.get('keterlambatan')
+    
+    # Validasi field wajib
+    if not nomor_ulok:
+        return jsonify({"status": "error", "message": "Field 'nomor_ulok' wajib diisi"}), 400
+    
+    if not lingkup_pekerjaan:
+        return jsonify({"status": "error", "message": "Field 'lingkup_pekerjaan' wajib diisi"}), 400
+    
+    if not kategori:
+        return jsonify({"status": "error", "message": "Field 'kategori' wajib diisi"}), 400
+    
+    if not h_awal:
+        return jsonify({"status": "error", "message": "Field 'h_awal' wajib diisi"}), 400
+    
+    if not h_akhir:
+        return jsonify({"status": "error", "message": "Field 'h_akhir' wajib diisi"}), 400
+    
+    if keterlambatan is None:
+        return jsonify({"status": "error", "message": "Field 'keterlambatan' wajib diisi"}), 400
+    
+    try:
+        result = google_provider.update_keterlambatan_day_gantt(
+            nomor_ulok,
+            lingkup_pekerjaan,
+            kategori,
+            h_awal,
+            h_akhir,
+            keterlambatan
+        )
+        
+        if result["success"]:
+            return jsonify({
+                "status": "success",
+                "message": result["message"],
+                "row_index": result.get("row_index"),
+                "action": result.get("action"),
+                "value": result.get("value")
+            }), 200
+        else:
+            return jsonify({
+                "status": "error",
+                "message": result["message"]
+            }), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route('/api/get_spk_status', methods=['GET'])
 def get_spk_status():
     ulok = request.args.get('ulok')

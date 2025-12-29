@@ -582,6 +582,328 @@ class GoogleServiceProvider:
             print(f"Error insert/update gantt chart data: {e}")
             return {"success": False, "message": str(e)}
 
+    def insert_pengawasan_to_gantt_chart(self, nomor_ulok, lingkup_pekerjaan, pengawasan_day):
+        """
+        Insert data Pengawasan (angka hari) ke kolom Pengawasan_1 s/d Pengawasan_10 secara berurutan.
+        Cari baris berdasarkan Nomor Ulok dan Lingkup_Pekerjaan, lalu insert ke kolom Pengawasan 
+        yang pertama masih kosong.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk mencari baris
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan untuk mencari baris
+        pengawasan_day : int/str
+            Angka hari yang akan diinsert ke kolom Pengawasan
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            
+            if not all_values:
+                return {"success": False, "message": "Sheet kosong atau header tidak ditemukan"}
+            
+            headers = all_values[0]
+            data_rows = all_values[1:]
+            
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+            
+            # Normalisasi input
+            target_ulok = str(nomor_ulok).strip().upper()
+            target_lingkup = str(lingkup_pekerjaan).strip().lower()
+            pengawasan_value = str(pengawasan_day).strip()
+            
+            # Validasi input
+            if not target_ulok:
+                return {"success": False, "message": "Nomor Ulok tidak boleh kosong"}
+            
+            if not target_lingkup:
+                return {"success": False, "message": "Lingkup Pekerjaan tidak boleh kosong"}
+            
+            if not pengawasan_value:
+                return {"success": False, "message": "Pengawasan day tidak boleh kosong"}
+            
+            # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan di header"}
+            
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan di header"}
+            
+            # Cari kolom Pengawasan_1 sampai Pengawasan_10
+            pengawasan_columns = []
+            for i in range(1, 11):  # Pengawasan_1 sampai Pengawasan_10
+                col_name = f"Pengawasan_{i}"
+                if col_name in headers:
+                    pengawasan_columns.append({
+                        "name": col_name,
+                        "index": headers.index(col_name)
+                    })
+            
+            if not pengawasan_columns:
+                return {"success": False, "message": "Kolom Pengawasan_1 sampai Pengawasan_10 tidak ditemukan di header"}
+            
+            # Cari baris berdasarkan Nomor Ulok dan Lingkup_Pekerjaan
+            found_row_index = None
+            found_row_data = None
+            for idx, row in enumerate(data_rows):
+                if len(row) <= max(ulok_idx, lingkup_idx):
+                    continue
+                
+                current_ulok = str(row[ulok_idx]).strip().upper()
+                current_lingkup = str(row[lingkup_idx]).strip().lower()
+                
+                if current_ulok == target_ulok and current_lingkup == target_lingkup:
+                    found_row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+                    found_row_data = row
+                    break
+            
+            if not found_row_index:
+                return {
+                    "success": False, 
+                    "message": f"Data dengan Nomor Ulok '{target_ulok}' dan Lingkup '{target_lingkup}' tidak ditemukan"
+                }
+            
+            # Cari kolom Pengawasan pertama yang masih kosong
+            target_pengawasan_col = None
+            for peng_col in pengawasan_columns:
+                col_idx = peng_col["index"]
+                # Cek apakah cell kosong
+                cell_value = ""
+                if len(found_row_data) > col_idx:
+                    cell_value = str(found_row_data[col_idx]).strip()
+                
+                if not cell_value:
+                    target_pengawasan_col = peng_col
+                    break
+            
+            if not target_pengawasan_col:
+                return {
+                    "success": False, 
+                    "message": "Semua kolom Pengawasan_1 sampai Pengawasan_10 sudah terisi"
+                }
+            
+            # Update cell Pengawasan yang kosong
+            col_idx_1based = target_pengawasan_col["index"] + 1
+            cell_range = gspread.utils.rowcol_to_a1(found_row_index, col_idx_1based)
+            
+            worksheet.update(cell_range, [[pengawasan_value]], value_input_option='USER_ENTERED')
+            
+            return {
+                "success": True,
+                "message": f"Data berhasil diinsert ke {target_pengawasan_col['name']}",
+                "row_index": found_row_index,
+                "column_name": target_pengawasan_col["name"],
+                "value": pengawasan_value
+            }
+            
+        except Exception as e:
+            print(f"Error insert pengawasan to gantt chart: {e}")
+            return {"success": False, "message": str(e)}
+
+    def update_keterlambatan_day_gantt(self, nomor_ulok, lingkup_pekerjaan, kategori, h_awal, h_akhir, keterlambatan):
+        """
+        Insert atau Update kolom keterlambatan di sheet DAY_GANTT_CHART_SHEET_NAME.
+        Cari baris berdasarkan Nomor Ulok, Lingkup_Pekerjaan, Kategori, h_awal, dan h_akhir.
+        Jika ditemukan, update kolom keterlambatan. Jika tidak, insert baris baru.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk mencari baris
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan untuk mencari baris
+        kategori : str
+            Kategori pekerjaan untuk mencari baris
+        h_awal : str
+            Hari awal untuk mencari baris
+        h_akhir : str
+            Hari akhir untuk mencari baris
+        keterlambatan : str/int
+            Nilai keterlambatan yang akan diinsert/update
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            
+            # Normalisasi input
+            target_ulok = str(nomor_ulok).strip().upper()
+            target_lingkup = str(lingkup_pekerjaan).strip().lower()
+            target_kategori = str(kategori).strip().lower()
+            target_h_awal = str(h_awal).strip()
+            target_h_akhir = str(h_akhir).strip()
+            keterlambatan_value = str(keterlambatan).strip()
+            
+            # Validasi input
+            if not target_ulok:
+                return {"success": False, "message": "Nomor Ulok tidak boleh kosong"}
+            if not target_lingkup:
+                return {"success": False, "message": "Lingkup Pekerjaan tidak boleh kosong"}
+            if not target_kategori:
+                return {"success": False, "message": "Kategori tidak boleh kosong"}
+            
+            if not all_values:
+                # Sheet kosong, buat header default dengan kolom keterlambatan
+                default_headers = [
+                    config.COLUMN_NAMES.LOKASI,
+                    config.COLUMN_NAMES.LINGKUP_PEKERJAAN,
+                    "Kategori",
+                    config.COLUMN_NAMES.HARI_AWAL,
+                    config.COLUMN_NAMES.HARI_AKHIR,
+                    "keterlambatan"
+                ]
+                worksheet.append_row(default_headers, value_input_option='USER_ENTERED')
+                headers = default_headers
+                data_rows = []
+            else:
+                headers = all_values[0]
+                data_rows = all_values[1:]
+            
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+            
+            # Pastikan kolom keterlambatan ada di header
+            if "keterlambatan" not in headers:
+                # Tambahkan kolom keterlambatan ke header
+                new_col_idx = len(headers) + 1
+                worksheet.update_cell(1, new_col_idx, "keterlambatan")
+                headers.append("keterlambatan")
+            
+            # Cari index kolom yang diperlukan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                ulok_idx = headers.index("Nomor Ulok") if "Nomor Ulok" in headers else None
+                if ulok_idx is None:
+                    return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan di header"}
+            
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                lingkup_idx = headers.index("Lingkup_Pekerjaan") if "Lingkup_Pekerjaan" in headers else None
+                if lingkup_idx is None:
+                    return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan di header"}
+            
+            try:
+                kategori_idx = headers.index("Kategori")
+            except ValueError:
+                return {"success": False, "message": "Kolom Kategori tidak ditemukan di header"}
+            
+            try:
+                h_awal_idx = headers.index(config.COLUMN_NAMES.HARI_AWAL)
+            except ValueError:
+                h_awal_idx = headers.index("h_awal") if "h_awal" in headers else None
+                if h_awal_idx is None:
+                    return {"success": False, "message": "Kolom h_awal tidak ditemukan di header"}
+            
+            try:
+                h_akhir_idx = headers.index(config.COLUMN_NAMES.HARI_AKHIR)
+            except ValueError:
+                h_akhir_idx = headers.index("h_akhir") if "h_akhir" in headers else None
+                if h_akhir_idx is None:
+                    return {"success": False, "message": "Kolom h_akhir tidak ditemukan di header"}
+            
+            keterlambatan_idx = headers.index("keterlambatan")
+            
+            # Cari baris yang cocok dengan semua kriteria
+            found_row_index = None
+            for idx, row in enumerate(data_rows):
+                if len(row) <= max(ulok_idx, lingkup_idx, kategori_idx, h_awal_idx, h_akhir_idx):
+                    continue
+                
+                current_ulok = str(row[ulok_idx]).strip().upper()
+                current_lingkup = str(row[lingkup_idx]).strip().lower()
+                current_kategori = str(row[kategori_idx]).strip().lower()
+                current_h_awal = str(row[h_awal_idx]).strip()
+                current_h_akhir = str(row[h_akhir_idx]).strip()
+                
+                # Match semua kriteria
+                if (current_ulok == target_ulok and 
+                    current_lingkup == target_lingkup and 
+                    current_kategori == target_kategori and
+                    current_h_awal == target_h_awal and
+                    current_h_akhir == target_h_akhir):
+                    found_row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+                    break
+            
+            if found_row_index:
+                # UPDATE: Data ditemukan, update kolom keterlambatan
+                cell_range = gspread.utils.rowcol_to_a1(found_row_index, keterlambatan_idx + 1)
+                worksheet.update(cell_range, [[keterlambatan_value]], value_input_option='USER_ENTERED')
+                
+                return {
+                    "success": True,
+                    "message": "Keterlambatan berhasil diperbarui",
+                    "row_index": found_row_index,
+                    "action": "update",
+                    "value": keterlambatan_value
+                }
+            else:
+                # INSERT: Data tidak ditemukan, tambahkan baris baru
+                row_data = []
+                for header in headers:
+                    if header == config.COLUMN_NAMES.LOKASI or header == "Nomor Ulok":
+                        row_data.append(nomor_ulok)
+                    elif header == config.COLUMN_NAMES.LINGKUP_PEKERJAAN or header == "Lingkup_Pekerjaan":
+                        row_data.append(lingkup_pekerjaan)
+                    elif header == "Kategori":
+                        row_data.append(kategori)
+                    elif header == config.COLUMN_NAMES.HARI_AWAL or header == "h_awal":
+                        row_data.append(h_awal)
+                    elif header == config.COLUMN_NAMES.HARI_AKHIR or header == "h_akhir":
+                        row_data.append(h_akhir)
+                    elif header == "keterlambatan":
+                        row_data.append(keterlambatan_value)
+                    else:
+                        row_data.append("")
+                
+                result = worksheet.append_row(
+                    row_data,
+                    value_input_option='USER_ENTERED',
+                    insert_data_option='INSERT_ROWS'
+                )
+                
+                # Parse response untuk mendapatkan row number
+                new_row_index = None
+                try:
+                    updated_range = result.get('updates', {}).get('updatedRange', '')
+                    if updated_range:
+                        range_part = updated_range.split('!')[-1]
+                        match = re.search(r'[A-Z]+(\d+)', range_part)
+                        if match:
+                            new_row_index = int(match.group(1))
+                except Exception as e:
+                    print(f"Warning: Could not parse row index from append response: {e}")
+                
+                if not new_row_index:
+                    new_row_index = len(worksheet.get_all_values())
+                
+                return {
+                    "success": True,
+                    "message": "Data baru dengan keterlambatan berhasil ditambahkan",
+                    "row_index": new_row_index,
+                    "action": "insert",
+                    "value": keterlambatan_value
+                }
+                
+        except Exception as e:
+            print(f"Error update keterlambatan day gantt: {e}")
+            return {"success": False, "message": str(e)}
+
     def insert_day_gantt_chart_data(self, data_list):
         """
         FIXED: Support Multi-Range per Kategori.
