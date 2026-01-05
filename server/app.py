@@ -38,7 +38,9 @@ CORS(app,
          "https://sparta-alfamart.vercel.app/",
          "https://frontend-form-virid.vercel.app",
          "https://frontend-form-virid.vercel.app/",
-         "https://script.google.com"
+         "https://script.google.com",
+         "https://opnamebnm.vercel.app",
+         "https://opnamebnm.vercel.app/"
 
      ],
      methods=["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
