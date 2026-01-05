@@ -2354,6 +2354,67 @@ def name_dan_cabang_by_email():
 def health():
     return jsonify({"status": "ok", "message": "Service is alive"}), 200
 
+# --- ENDPOINT PROCESS SUMMARY OPNAME ---
+@app.route('/api/process_summary_opname', methods=['POST'])
+def process_summary_opname():
+    """
+    Endpoint untuk memproses summary opname.
+    
+    Request body:
+    {
+        "no_ulok": "Z001-2512-TEST",
+        "lingkup_pekerjaan": "SIPIL",
+        "jenis_pekerjaan": "PEKERJAAN PERSIAPAN"
+    }
+    
+    Logika:
+    1. Cari total_harga_akhir di opname_final berdasarkan no_ulok, lingkup_pekerjaan, jenis_pekerjaan
+    2. Cari row di summary_opname berdasarkan no_ulok dan lingkup_pekerjaan
+    3. Jika total_harga_akhir positif -> tambahkan ke kerja_tambah
+       Jika total_harga_akhir negatif -> tambahkan ke kerja_kurang
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "Request body tidak boleh kosong."}), 400
+    
+    no_ulok = data.get('no_ulok') or data.get('nomor_ulok')
+    lingkup_pekerjaan = data.get('lingkup_pekerjaan')
+    jenis_pekerjaan = data.get('jenis_pekerjaan')
+    
+    # Validasi input
+    if not no_ulok:
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'no_ulok' atau 'nomor_ulok' dibutuhkan."
+        }), 400
+    
+    if not lingkup_pekerjaan:
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'lingkup_pekerjaan' dibutuhkan."
+        }), 400
+    
+    if not jenis_pekerjaan:
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'jenis_pekerjaan' dibutuhkan."
+        }), 400
+    
+    try:
+        result = google_provider.process_summary_opname(no_ulok, lingkup_pekerjaan, jenis_pekerjaan)
+        
+        if result.get("status") == "success":
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": f"Terjadi kesalahan server: {str(e)}"
+        }), 500
+
 # --- ENDPOINT PROXY GAS (MIGRASI DARI BACKEND LAMA) ---
 @app.route('/api/form', methods=['GET', 'POST'])
 def proxy_form():

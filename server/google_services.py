@@ -1912,3 +1912,180 @@ class GoogleServiceProvider:
         except gspread.exceptions.WorksheetNotFound:
             print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
         return None
+
+    def process_summary_opname(self, nomor_ulok, lingkup_pekerjaan, jenis_pekerjaan):
+        """
+        Process summary opname berdasarkan data dari opname_final.
+        
+        1. Cari total_harga_akhir di OPNAME_SHEET_NAME berdasarkan nomor_ulok, lingkup_pekerjaan, jenis_pekerjaan
+        2. Cari/buat row di SUMMARY_OPNAME_SHEET_NAME berdasarkan nomor_ulok dan lingkup_pekerjaan
+        3. Update kerja_tambah atau kerja_kurang berdasarkan nilai total_harga_akhir
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk pencarian
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan (SIPIL/ME)
+        jenis_pekerjaan : str
+            Jenis Pekerjaan untuk pencarian
+            
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            # Buka spreadsheet opname
+            opname_spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
+            
+            # === STEP 1: Cari total_harga_akhir di OPNAME_SHEET_NAME ===
+            opname_sheet = opname_spreadsheet.worksheet(config.OPNAME_SHEET_NAME)
+            opname_records = opname_sheet.get_all_records()
+            
+            # Normalisasi input
+            target_ulok = self._normalize_ulok(nomor_ulok)
+            target_lingkup = self._normalize_lingkup(lingkup_pekerjaan)
+            target_jenis = str(jenis_pekerjaan).strip().upper() if jenis_pekerjaan else ""
+            
+            total_harga_akhir = None
+            
+            for record in opname_records:
+                record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
+                record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', ''))
+                record_jenis = str(record.get('jenis_pekerjaan', '')).strip().upper()
+                
+                if record_ulok == target_ulok and record_lingkup == target_lingkup and record_jenis == target_jenis:
+                    # Ambil total_harga_akhir dan konversi ke float
+                    harga_raw = record.get('total_harga_akhir', 0)
+                    try:
+                        # Handle format angka dengan koma atau titik
+                        if isinstance(harga_raw, str):
+                            harga_raw = harga_raw.replace(',', '').replace('.', '').strip()
+                            if harga_raw == '' or harga_raw == '-':
+                                harga_raw = 0
+                        total_harga_akhir = float(harga_raw)
+                    except (ValueError, TypeError):
+                        total_harga_akhir = 0
+                    break
+            
+            if total_harga_akhir is None:
+                return {
+                    "status": "error",
+                    "message": f"Data tidak ditemukan di sheet {config.OPNAME_SHEET_NAME} untuk Nomor Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}, Jenis: {jenis_pekerjaan}"
+                }
+            
+            # === STEP 2: Cari/Update row di SUMMARY_OPNAME_SHEET_NAME ===
+            summary_sheet = opname_spreadsheet.worksheet(config.SUMMARY_OPNAME_SHEET_NAME)
+            summary_records = summary_sheet.get_all_records()
+            summary_headers = summary_sheet.row_values(1)
+            
+            # Cari row yang cocok
+            found_row_index = None
+            existing_kerja_tambah = 0
+            existing_kerja_kurang = 0
+            
+            for idx, record in enumerate(summary_records):
+                record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
+                record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', ''))
+                
+                if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                    found_row_index = idx + 2  # +2 karena index 0 dan header di row 1
+                    
+                    # Ambil nilai existing kerja_tambah dan kerja_kurang
+                    kerja_tambah_raw = record.get('kerja_tambah', 0)
+                    kerja_kurang_raw = record.get('kerja_kurang', 0)
+                    
+                    try:
+                        if isinstance(kerja_tambah_raw, str):
+                            kerja_tambah_raw = kerja_tambah_raw.replace(',', '').replace('.', '').strip()
+                            if kerja_tambah_raw == '' or kerja_tambah_raw == '-':
+                                kerja_tambah_raw = 0
+                        existing_kerja_tambah = float(kerja_tambah_raw)
+                    except (ValueError, TypeError):
+                        existing_kerja_tambah = 0
+                    
+                    try:
+                        if isinstance(kerja_kurang_raw, str):
+                            kerja_kurang_raw = kerja_kurang_raw.replace(',', '').replace('.', '').strip()
+                            if kerja_kurang_raw == '' or kerja_kurang_raw == '-':
+                                kerja_kurang_raw = 0
+                        existing_kerja_kurang = float(kerja_kurang_raw)
+                    except (ValueError, TypeError):
+                        existing_kerja_kurang = 0
+                    
+                    break
+            
+            # === STEP 3: Logika update berdasarkan total_harga_akhir ===
+            new_kerja_tambah = existing_kerja_tambah
+            new_kerja_kurang = existing_kerja_kurang
+            action_taken = ""
+            
+            if total_harga_akhir >= 0:
+                # Nilai positif -> masuk ke kerja_tambah
+                new_kerja_tambah = existing_kerja_tambah + total_harga_akhir
+                action_taken = f"Menambahkan {total_harga_akhir} ke kerja_tambah (sebelumnya: {existing_kerja_tambah}, sekarang: {new_kerja_tambah})"
+            else:
+                # Nilai negatif -> masuk ke kerja_kurang (simpan sebagai nilai absolut)
+                new_kerja_kurang = existing_kerja_kurang + abs(total_harga_akhir)
+                action_taken = f"Menambahkan {abs(total_harga_akhir)} ke kerja_kurang (sebelumnya: {existing_kerja_kurang}, sekarang: {new_kerja_kurang})"
+            
+            # === STEP 4: Simpan/Update ke sheet ===
+            if found_row_index:
+                # Update row yang ada
+                # Cari index kolom kerja_tambah dan kerja_kurang
+                try:
+                    col_kerja_tambah = summary_headers.index('kerja_tambah') + 1
+                    col_kerja_kurang = summary_headers.index('kerja_kurang') + 1
+                    
+                    # Update kedua kolom
+                    summary_sheet.update_cell(found_row_index, col_kerja_tambah, new_kerja_tambah)
+                    summary_sheet.update_cell(found_row_index, col_kerja_kurang, new_kerja_kurang)
+                    
+                    return {
+                        "status": "success",
+                        "message": "Data berhasil diupdate",
+                        "action": action_taken,
+                        "row_index": found_row_index,
+                        "total_harga_akhir": total_harga_akhir,
+                        "kerja_tambah": new_kerja_tambah,
+                        "kerja_kurang": new_kerja_kurang
+                    }
+                except ValueError as e:
+                    return {
+                        "status": "error",
+                        "message": f"Kolom kerja_tambah atau kerja_kurang tidak ditemukan di header: {summary_headers}"
+                    }
+            else:
+                # Insert row baru
+                new_row_data = {
+                    'Nomor Ulok': nomor_ulok,
+                    'Lingkup_Pekerjaan': lingkup_pekerjaan,
+                    'kerja_tambah': new_kerja_tambah,
+                    'kerja_kurang': new_kerja_kurang
+                }
+                
+                # Susun row berdasarkan header
+                row_values = [new_row_data.get(header, '') for header in summary_headers]
+                summary_sheet.append_row(row_values, value_input_option='USER_ENTERED')
+                
+                return {
+                    "status": "success",
+                    "message": "Data baru berhasil ditambahkan",
+                    "action": action_taken,
+                    "total_harga_akhir": total_harga_akhir,
+                    "kerja_tambah": new_kerja_tambah,
+                    "kerja_kurang": new_kerja_kurang
+                }
+                
+        except gspread.exceptions.WorksheetNotFound as e:
+            print(f"Error: Worksheet tidak ditemukan: {e}")
+            return {
+                "status": "error",
+                "message": f"Worksheet tidak ditemukan: {str(e)}"
+            }
+        except Exception as e:
+            print(f"Error process_summary_opname: {e}")
+            return {
+                "status": "error",
+                "message": f"Terjadi kesalahan: {str(e)}"
+            }

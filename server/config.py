@@ -33,6 +33,7 @@ GANTT_CHART_SHEET_NAME = "gantt_chart"
 DAY_GANTT_CHART_SHEET_NAME = "day_gantt_chart"
 
 SUMMARY_OPNAME_SHEET_NAME = "summary_opname"
+OPNAME_SHEET_NAME = "opname_final"
 
 # Nama sheet dinamis akan ditangani di kode, contoh: "DataH2", "SerahTerima"
 
