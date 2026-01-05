@@ -1950,8 +1950,8 @@ class GoogleServiceProvider:
             total_harga_akhir = None
             
             for record in opname_records:
-                record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
-                record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', ''))
+                record_ulok = self._normalize_ulok(record.get('no_ulok', ''))
+                record_lingkup = self._normalize_lingkup(record.get('lingkup_pekerjaan', ''))
                 record_jenis = str(record.get('jenis_pekerjaan', '')).strip().upper()
                 
                 if record_ulok == target_ulok and record_lingkup == target_lingkup and record_jenis == target_jenis:
@@ -1992,8 +1992,8 @@ class GoogleServiceProvider:
                     found_row_index = idx + 2  # +2 karena index 0 dan header di row 1
                     
                     # Ambil nilai existing kerja_tambah dan kerja_kurang
-                    kerja_tambah_raw = record.get('kerja_tambah', 0)
-                    kerja_kurang_raw = record.get('kerja_kurang', 0)
+                    kerja_tambah_raw = record.get('Kerja_Tambah', 0)
+                    kerja_kurang_raw = record.get('Kerja_Kurang', 0)
                     
                     try:
                         if isinstance(kerja_tambah_raw, str):
@@ -2034,8 +2034,8 @@ class GoogleServiceProvider:
                 # Update row yang ada
                 # Cari index kolom kerja_tambah dan kerja_kurang
                 try:
-                    col_kerja_tambah = summary_headers.index('kerja_tambah') + 1
-                    col_kerja_kurang = summary_headers.index('kerja_kurang') + 1
+                    col_kerja_tambah = summary_headers.index('Kerja_Tambah') + 1
+                    col_kerja_kurang = summary_headers.index('Kerja_Kurang') + 1
                     
                     # Update kedua kolom
                     summary_sheet.update_cell(found_row_index, col_kerja_tambah, new_kerja_tambah)
@@ -2047,8 +2047,8 @@ class GoogleServiceProvider:
                         "action": action_taken,
                         "row_index": found_row_index,
                         "total_harga_akhir": total_harga_akhir,
-                        "kerja_tambah": new_kerja_tambah,
-                        "kerja_kurang": new_kerja_kurang
+                        "Kerja_Tambah": new_kerja_tambah,
+                        "Kerja_Kurang": new_kerja_kurang
                     }
                 except ValueError as e:
                     return {
@@ -2060,8 +2060,8 @@ class GoogleServiceProvider:
                 new_row_data = {
                     'Nomor Ulok': nomor_ulok,
                     'Lingkup_Pekerjaan': lingkup_pekerjaan,
-                    'kerja_tambah': new_kerja_tambah,
-                    'kerja_kurang': new_kerja_kurang
+                    'Kerja_Tambah': new_kerja_tambah,
+                    'Kerja_Kurang': new_kerja_kurang
                 }
                 
                 # Susun row berdasarkan header
