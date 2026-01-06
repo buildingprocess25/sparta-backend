@@ -34,6 +34,7 @@ DAY_GANTT_CHART_SHEET_NAME = "day_gantt_chart"
 
 SUMMARY_OPNAME_SHEET_NAME = "summary_opname"
 OPNAME_SHEET_NAME = "opname_final"
+SUMMARY_DATA_SHEET_NAME = "summary"
 
 # Nama sheet dinamis akan ditangani di kode, contoh: "DataH2", "SerahTerima"
 
@@ -70,6 +71,7 @@ class COLUMN_NAMES:
     TANGGAL_OPNAME_FINAL = "tanggal_opname_final"
     HARI_AWAL = "h_awal"
     HARI_AKHIR = "h_akhir"
+    DURASI_SPK = "Durasi"
 
 
 # --- Jabatan & Status ---

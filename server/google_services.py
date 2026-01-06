@@ -1454,6 +1454,120 @@ class GoogleServiceProvider:
             print(f"Gagal menyalin data ke approved sheet RAB 2: {e}")
             return False
 
+    def copy_to_summary_sheet(self, row_data, source_type='RAB'):
+        """
+        Menyalin data RAB/SPK yang sudah disetujui ke sheet summary untuk rekap.
+        
+        Parameter:
+        - row_data: dictionary berisi data dari RAB atau SPK
+        - source_type: 'RAB' atau 'SPK' untuk menentukan mapping kolom
+        
+        Mapping kolom RAB:
+        - Cabang -> Cabang
+        - Nomor Ulok -> Nomor Ulok
+        - Proyek -> Proyek
+        - Lingkup_Pekerjaan -> Lingkup_Pekerjaan
+        - Nama_PT -> Kontraktor
+        - nama_toko / Nama_Toko -> Nama_Toko
+        - Luas Bangunan -> Luas Bangunan
+        - Luas Terbangun -> Luas Terbangunan
+        - Luas Area Terbuka -> Luas Area Terbuka
+        - Luas Area Parkir -> Luas Area Parkir
+        - Luas Area Sales -> Luas Area Sales
+        - Luas Gudang -> Luas Gudang
+        - Grand Total Final -> Total Penawaran Final
+        
+        Mapping kolom SPK (update existing row):
+        - Kode Toko -> Kode_Toko
+        - Durasi -> Durasi SPK
+        - Grand Total -> Nominal SPK
+        - Waktu Mulai -> Awal_SPK
+        - Waktu Selesai -> Akhir_SPK
+        """
+        try:
+            # 1. Buka Spreadsheet Opname
+            spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
+            
+            # 2. Buka Worksheet Summary
+            summary_sheet = spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
+            
+            if source_type == 'RAB':
+                # 3. Mapping data dari row_data ke format summary sheet untuk RAB
+                summary_data = {
+                    'Cabang': row_data.get('Cabang', ''),
+                    'Nomor Ulok': row_data.get('Nomor Ulok', ''),
+                    'Proyek': row_data.get('Proyek', row_data.get(config.COLUMN_NAMES.PROYEK, '')),
+                    'Lingkup_Pekerjaan': row_data.get('Lingkup_Pekerjaan', row_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, '')),
+                    'Kontraktor': row_data.get('Nama_PT', row_data.get(config.COLUMN_NAMES.NAMA_PT, '')),
+                    'Nama_Toko': row_data.get('Nama_Toko', row_data.get('nama_toko', '')),
+                    'Luas Bangunan': row_data.get('Luas Bangunan', ''),
+                    'Luas Terbangunan': row_data.get('Luas Terbangun', row_data.get('Luas Terbangunan', '')),
+                    'Luas Area Terbuka': row_data.get('Luas Area Terbuka', ''),
+                    'Luas Area Parkir': row_data.get('Luas Area Parkir', ''),
+                    'Luas Area Sales': row_data.get('Luas Area Sales', ''),
+                    'Luas Gudang': row_data.get('Luas Gudang', ''),
+                    'Total Penawaran Final': row_data.get('Grand Total Final', row_data.get(config.COLUMN_NAMES.GRAND_TOTAL_FINAL, ''))
+                }
+                
+                # 4. Ambil header dari sheet untuk memastikan urutan yang benar
+                headers = summary_sheet.row_values(1)
+                
+                # 5. Susun data sesuai urutan header
+                data_to_append = [summary_data.get(header, "") for header in headers]
+                
+                # 6. Simpan ke sheet
+                summary_sheet.append_row(
+                    data_to_append,
+                    value_input_option='USER_ENTERED',
+                    insert_data_option='INSERT_ROWS'
+                )
+                print("Berhasil menyalin data RAB ke sheet Summary")
+                return True
+                
+            elif source_type == 'SPK':
+                # Untuk SPK, update baris yang sudah ada berdasarkan Nomor Ulok dan Lingkup_Pekerjaan
+                nomor_ulok = row_data.get('Nomor Ulok', '')
+                lingkup_pekerjaan = row_data.get('Lingkup Pekerjaan', row_data.get('Lingkup_Pekerjaan', row_data.get('lingkup_pekerjaan', '')))
+                
+                # Data SPK yang akan diupdate
+                spk_data = {
+                    'Kode_Toko': row_data.get('Kode Toko', row_data.get('kode_toko', '')),
+                    'Durasi SPK': row_data.get('Durasi', row_data.get(config.COLUMN_NAMES.DURASI_SPK, '')),
+                    'Nominal SPK': row_data.get('Grand Total', row_data.get(config.COLUMN_NAMES.GRAND_TOTAL, '')),
+                    'Awal_SPK': row_data.get('Waktu Mulai', row_data.get('awal_spk', '')),
+                    'Akhir_SPK': row_data.get('Waktu Selesai', row_data.get('akhir_spk', ''))
+                }
+                
+                # Cari baris yang cocok berdasarkan Nomor Ulok dan Lingkup_Pekerjaan
+                all_records = summary_sheet.get_all_records()
+                headers = summary_sheet.row_values(1)
+                
+                row_found = None
+                for idx, record in enumerate(all_records):
+                    record_ulok = str(record.get('Nomor Ulok', '')).strip()
+                    record_lingkup = str(record.get('Lingkup_Pekerjaan', '')).strip()
+                    
+                    if record_ulok.upper() == nomor_ulok.strip().upper() and record_lingkup.upper() == lingkup_pekerjaan.strip().upper():
+                        row_found = idx + 2  # +2 karena index 0-based dan ada header
+                        break
+                
+                if row_found:
+                    # Update kolom-kolom SPK pada baris yang ditemukan
+                    for col_name, value in spk_data.items():
+                        if col_name in headers:
+                            col_idx = headers.index(col_name) + 1  # +1 karena gspread 1-based
+                            summary_sheet.update_cell(row_found, col_idx, value)
+                    
+                    print(f"Berhasil update data SPK ke sheet Summary untuk Ulok: {nomor_ulok}")
+                    return True
+                else:
+                    print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
+                    return False
+                    
+        except Exception as e:
+            print(f"Gagal menyalin data ke summary sheet: {e}")
+            return False
+
 
     def delete_row(self, worksheet_name, row_index):
         try:

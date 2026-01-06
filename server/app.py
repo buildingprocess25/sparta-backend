@@ -1003,6 +1003,9 @@ def handle_rab_approval():
             row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
 
             google_provider.copy_to_approved_sheet(row_data)
+            
+            # ====== Kirim data ke Summary Sheet ======
+            google_provider.copy_to_summary_sheet(row_data)
 
             # ====== Kumpulkan email dari jabatan ======
             email_pembuat = row_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
@@ -2038,6 +2041,14 @@ def handle_spk_approval():
                 print(f"Warning: Gagal insert ke Summary Opname: {opname_error}")
                 # Tidak raise error agar proses approval tetap berjalan
             # --- END INSERT SUMMARY OPNAME ---
+            
+            # --- UPDATE DATA SPK KE SUMMARY DATA SHEET ---
+            try:
+                google_provider.copy_to_summary_sheet(row_data, source_type='SPK')
+                print(f"Data SPK berhasil diupdate ke Summary Data untuk Ulok: {nomor_ulok_spk}")
+            except Exception as summary_error:
+                print(f"Warning: Gagal update ke Summary Data: {summary_error}")
+            # --- END UPDATE SUMMARY DATA ---
             
             jenis_toko = row_data.get('Jenis_Toko', row_data.get('Proyek', 'N/A'))
             nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
