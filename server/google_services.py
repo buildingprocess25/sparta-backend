@@ -2016,30 +2016,30 @@ class GoogleServiceProvider:
                     break
             
             # === STEP 3: Logika update berdasarkan total_harga_akhir ===
-            new_kerja_tambah = existing_kerja_tambah
-            new_kerja_kurang = existing_kerja_kurang
+            new_kerja_tambah = None
+            new_kerja_kurang = None
             action_taken = ""
+            is_positive = total_harga_akhir >= 0
             
-            if total_harga_akhir >= 0:
-                # Nilai positif -> masuk ke kerja_tambah
+            if is_positive:
+                # Nilai positif -> masuk ke kerja_tambah saja
                 new_kerja_tambah = existing_kerja_tambah + total_harga_akhir
-                action_taken = f"Menambahkan {total_harga_akhir} ke kerja_tambah (sebelumnya: {existing_kerja_tambah}, sekarang: {new_kerja_tambah})"
+                action_taken = f"Menambahkan {total_harga_akhir} ke Kerja_Tambah (sebelumnya: {existing_kerja_tambah}, sekarang: {new_kerja_tambah})"
             else:
-                # Nilai negatif -> masuk ke kerja_kurang (simpan sebagai nilai absolut)
+                # Nilai negatif -> masuk ke kerja_kurang saja (simpan sebagai nilai absolut)
                 new_kerja_kurang = existing_kerja_kurang + abs(total_harga_akhir)
-                action_taken = f"Menambahkan {abs(total_harga_akhir)} ke kerja_kurang (sebelumnya: {existing_kerja_kurang}, sekarang: {new_kerja_kurang})"
+                action_taken = f"Menambahkan {abs(total_harga_akhir)} ke Kerja_Kurang (sebelumnya: {existing_kerja_kurang}, sekarang: {new_kerja_kurang})"
             
             # === STEP 4: Simpan/Update ke sheet ===
             if found_row_index:
-                # Update row yang ada
-                # Cari index kolom kerja_tambah dan kerja_kurang
+                # Update row yang ada - hanya update kolom yang relevan
                 try:
-                    col_kerja_tambah = summary_headers.index('Kerja_Tambah') + 1
-                    col_kerja_kurang = summary_headers.index('Kerja_Kurang') + 1
-                    
-                    # Update kedua kolom
-                    summary_sheet.update_cell(found_row_index, col_kerja_tambah, new_kerja_tambah)
-                    summary_sheet.update_cell(found_row_index, col_kerja_kurang, new_kerja_kurang)
+                    if is_positive:
+                        col_kerja_tambah = summary_headers.index('Kerja_Tambah') + 1
+                        summary_sheet.update_cell(found_row_index, col_kerja_tambah, new_kerja_tambah)
+                    else:
+                        col_kerja_kurang = summary_headers.index('Kerja_Kurang') + 1
+                        summary_sheet.update_cell(found_row_index, col_kerja_kurang, new_kerja_kurang)
                     
                     return {
                         "status": "success",
@@ -2047,22 +2047,26 @@ class GoogleServiceProvider:
                         "action": action_taken,
                         "row_index": found_row_index,
                         "total_harga_akhir": total_harga_akhir,
-                        "Kerja_Tambah": new_kerja_tambah,
-                        "Kerja_Kurang": new_kerja_kurang
+                        "Kerja_Tambah": new_kerja_tambah if is_positive else existing_kerja_tambah,
+                        "Kerja_Kurang": new_kerja_kurang if not is_positive else existing_kerja_kurang
                     }
                 except ValueError as e:
                     return {
                         "status": "error",
-                        "message": f"Kolom kerja_tambah atau kerja_kurang tidak ditemukan di header: {summary_headers}"
+                        "message": f"Kolom Kerja_Tambah atau Kerja_Kurang tidak ditemukan di header: {summary_headers}"
                     }
             else:
-                # Insert row baru
+                # Insert row baru - hanya isi kolom yang relevan, yang lain kosong
                 new_row_data = {
                     'Nomor Ulok': nomor_ulok,
-                    'Lingkup_Pekerjaan': lingkup_pekerjaan,
-                    'Kerja_Tambah': new_kerja_tambah,
-                    'Kerja_Kurang': new_kerja_kurang
+                    'Lingkup_Pekerjaan': lingkup_pekerjaan
                 }
+                
+                # Hanya isi kolom yang relevan
+                if is_positive:
+                    new_row_data['Kerja_Tambah'] = new_kerja_tambah
+                else:
+                    new_row_data['Kerja_Kurang'] = new_kerja_kurang
                 
                 # Susun row berdasarkan header
                 row_values = [new_row_data.get(header, '') for header in summary_headers]
@@ -2073,8 +2077,8 @@ class GoogleServiceProvider:
                     "message": "Data baru berhasil ditambahkan",
                     "action": action_taken,
                     "total_harga_akhir": total_harga_akhir,
-                    "kerja_tambah": new_kerja_tambah,
-                    "kerja_kurang": new_kerja_kurang
+                    "Kerja_Tambah": new_kerja_tambah if is_positive else '',
+                    "Kerja_Kurang": new_kerja_kurang if not is_positive else ''
                 }
                 
         except gspread.exceptions.WorksheetNotFound as e:
