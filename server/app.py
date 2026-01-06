@@ -2417,6 +2417,129 @@ def process_summary_opname():
             "message": f"Terjadi kesalahan server: {str(e)}"
         }), 500
 
+
+# --- ENDPOINT CHECK STATUS ITEM OPNAME ---
+@app.route('/api/check_status_item_opname', methods=['GET'])
+def check_status_item_opname():
+    """
+    Endpoint untuk mengecek status approval item opname.
+    
+    Query Parameters:
+    - no_ulok: Nomor Ulok (wajib)
+    - lingkup_pekerjaan: Lingkup Pekerjaan SIPIL/ME (wajib)
+    
+    Response jika semua approved:
+    {
+        "status": "approved",
+        "message": "Semua item opname sudah ter-approved.",
+        "tanggal_opname_final": "06/01/2026",
+        ...
+    }
+    
+    Response jika masih ada pending:
+    {
+        "status": "pending",
+        "message": "Masih ada X item yang belum ter-approved.",
+        "pending_items": [...],
+        ...
+    }
+    """
+    no_ulok = request.args.get('no_ulok') or request.args.get('nomor_ulok')
+    lingkup_pekerjaan = request.args.get('lingkup_pekerjaan')
+    
+    # Validasi input
+    if not no_ulok:
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'no_ulok' atau 'nomor_ulok' dibutuhkan."
+        }), 400
+    
+    if not lingkup_pekerjaan:
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'lingkup_pekerjaan' dibutuhkan."
+        }), 400
+    
+    try:
+        result = google_provider.check_opname_approval_status(no_ulok, lingkup_pekerjaan)
+        
+        if result.get("status") == "error":
+            return jsonify(result), 400
+        else:
+            return jsonify(result), 200
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": f"Terjadi kesalahan server: {str(e)}"
+        }), 500
+
+
+# --- ENDPOINT OPNAME LOCKED ---
+@app.route('/api/opname_locked', methods=['POST'])
+def opname_locked():
+    """
+    Endpoint untuk mengunci opname dan menyimpan tanggal hari ini ke tanggal_opname_final.
+    
+    Request body:
+    {
+        "status": "locked",
+        "ulok": "Z001-2512-TEST",
+        "lingkup_pekerjaan": "SIPIL"
+    }
+    
+    Response:
+    {
+        "status": "success",
+        "message": "Opname berhasil dikunci (locked) pada tanggal 06/01/2026",
+        "tanggal_opname_final": "06/01/2026",
+        ...
+    }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "Request body tidak boleh kosong."}), 400
+    
+    status_lock = data.get('status')
+    no_ulok = data.get('ulok') or data.get('no_ulok') or data.get('nomor_ulok')
+    lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get('lingkup')
+    
+    # Validasi input
+    if not status_lock or status_lock.lower() != 'locked':
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'status' harus bernilai 'locked'."
+        }), 400
+    
+    if not no_ulok:
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'ulok', 'no_ulok', atau 'nomor_ulok' dibutuhkan."
+        }), 400
+    
+    if not lingkup_pekerjaan:
+        return jsonify({
+            "status": "error",
+            "message": "Parameter 'lingkup_pekerjaan' atau 'lingkup' dibutuhkan."
+        }), 400
+    
+    try:
+        result = google_provider.lock_opname(no_ulok, lingkup_pekerjaan)
+        
+        if result.get("status") == "success":
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": f"Terjadi kesalahan server: {str(e)}"
+        }), 500
+
+
 # --- ENDPOINT PROXY GAS (MIGRASI DARI BACKEND LAMA) ---
 @app.route('/api/form', methods=['GET', 'POST'])
 def proxy_form():

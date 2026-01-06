@@ -2089,3 +2089,228 @@ class GoogleServiceProvider:
                 "status": "error",
                 "message": f"Terjadi kesalahan: {str(e)}"
             }
+
+    def check_opname_approval_status(self, nomor_ulok, lingkup_pekerjaan):
+        """
+        Mengecek apakah semua item opname sudah approved berdasarkan no_ulok dan lingkup_pekerjaan.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk pencarian
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan (SIPIL/ME)
+            
+        Returns:
+        --------
+        dict: Hasil pengecekan dengan status dan detail
+        """
+        try:
+            # Buka spreadsheet opname
+            opname_spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
+            
+            # === STEP 1: Ambil semua records dari OPNAME_SHEET_NAME ===
+            opname_sheet = opname_spreadsheet.worksheet(config.OPNAME_SHEET_NAME)
+            opname_records = opname_sheet.get_all_records()
+            
+            # Normalisasi input
+            target_ulok = self._normalize_ulok(nomor_ulok)
+            target_lingkup = self._normalize_lingkup(lingkup_pekerjaan)
+            
+            # Filter records yang sesuai dengan ulok dan lingkup
+            matching_records = []
+            for record in opname_records:
+                record_ulok = self._normalize_ulok(record.get('no_ulok', ''))
+                record_lingkup = self._normalize_lingkup(record.get('lingkup_pekerjaan', ''))
+                
+                if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                    matching_records.append(record)
+            
+            # Jika tidak ada data yang ditemukan
+            if not matching_records:
+                return {
+                    "status": "error",
+                    "message": f"Data tidak ditemukan untuk Nomor Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}"
+                }
+            
+            # === STEP 2: Cek approval_status dari semua records ===
+            approval_statuses = []
+            pending_items = []
+            approved_items = []
+            
+            for record in matching_records:
+                approval_status = str(record.get('approval_status', '')).strip().upper()
+                jenis_pekerjaan = record.get('jenis_pekerjaan', 'N/A')
+                
+                approval_statuses.append({
+                    "jenis_pekerjaan": jenis_pekerjaan,
+                    "approval_status": approval_status
+                })
+                
+                if approval_status == 'APPROVED':
+                    approved_items.append(jenis_pekerjaan)
+                else:
+                    pending_items.append({
+                        "jenis_pekerjaan": jenis_pekerjaan,
+                        "current_status": approval_status if approval_status else "PENDING"
+                    })
+            
+            # === STEP 3: Tentukan hasil berdasarkan status ===
+            total_items = len(matching_records)
+            approved_count = len(approved_items)
+            
+            if len(pending_items) == 0:
+                # Semua sudah approved, cari tanggal_opname_final dari summary
+                tanggal_opname_final = None
+                try:
+                    summary_sheet = opname_spreadsheet.worksheet(config.SUMMARY_OPNAME_SHEET_NAME)
+                    summary_records = summary_sheet.get_all_records()
+                    
+                    for record in summary_records:
+                        record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
+                        record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', ''))
+                        
+                        if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                            tanggal_opname_final = record.get(config.COLUMN_NAMES.TANGGAL_OPNAME_FINAL, '')
+                            break
+                except Exception as e:
+                    print(f"Warning: Gagal mengambil tanggal_opname_final: {e}")
+                
+                return {
+                    "status": "approved",
+                    "message": "Semua item opname sudah ter-approved.",
+                    "total_items": total_items,
+                    "approved_count": approved_count,
+                    "tanggal_opname_final": tanggal_opname_final if tanggal_opname_final else None,
+                    "detail": approval_statuses
+                }
+            else:
+                # Masih ada yang pending
+                return {
+                    "status": "pending",
+                    "message": f"Masih ada {len(pending_items)} item yang belum ter-approved.",
+                    "total_items": total_items,
+                    "approved_count": approved_count,
+                    "pending_count": len(pending_items),
+                    "pending_items": pending_items,
+                    "detail": approval_statuses
+                }
+                
+        except gspread.exceptions.WorksheetNotFound as e:
+            print(f"Error: Worksheet tidak ditemukan: {e}")
+            return {
+                "status": "error",
+                "message": f"Worksheet tidak ditemukan: {str(e)}"
+            }
+        except Exception as e:
+            print(f"Error check_opname_approval_status: {e}")
+            return {
+                "status": "error",
+                "message": f"Terjadi kesalahan: {str(e)}"
+            }
+
+    def lock_opname(self, nomor_ulok, lingkup_pekerjaan):
+        """
+        Menyimpan tanggal hari ini ke kolom tanggal_opname_final di SUMMARY_OPNAME_SHEET_NAME
+        berdasarkan Nomor Ulok dan Lingkup_Pekerjaan.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk pencarian
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan (SIPIL/ME)
+            
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            # Buka spreadsheet opname
+            opname_spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
+            
+            # Buka sheet summary opname
+            summary_sheet = opname_spreadsheet.worksheet(config.SUMMARY_OPNAME_SHEET_NAME)
+            summary_records = summary_sheet.get_all_records()
+            summary_headers = summary_sheet.row_values(1)
+            
+            # Normalisasi input
+            target_ulok = self._normalize_ulok(nomor_ulok)
+            target_lingkup = self._normalize_lingkup(lingkup_pekerjaan)
+            
+            # Tanggal hari ini dalam format DD/MM/YYYY
+            today = datetime.now(timezone(timedelta(hours=7)))  # WIB
+            tanggal_hari_ini = today.strftime("%d/%m/%Y")
+            
+            # Cari row yang cocok
+            found_row_index = None
+            for idx, record in enumerate(summary_records):
+                record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
+                record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', ''))
+                
+                if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                    found_row_index = idx + 2  # +2 karena index 0 dan header di row 1
+                    break
+            
+            if not found_row_index:
+                return {
+                    "status": "error",
+                    "message": f"Data tidak ditemukan di summary opname untuk Nomor Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}"
+                }
+            
+            # Cari index kolom tanggal_opname_final
+            col_name = config.COLUMN_NAMES.TANGGAL_OPNAME_FINAL
+            try:
+                col_index = summary_headers.index(col_name) + 1
+            except ValueError:
+                # Jika kolom tidak ada, tambahkan kolom baru
+                print(f"Kolom '{col_name}' tidak ditemukan, mencoba menambahkan...")
+                self.ensure_header_exists_in_sheet(opname_spreadsheet, config.SUMMARY_OPNAME_SHEET_NAME, col_name)
+                # Refresh headers
+                summary_headers = summary_sheet.row_values(1)
+                col_index = summary_headers.index(col_name) + 1
+            
+            # Update tanggal_opname_final
+            summary_sheet.update_cell(found_row_index, col_index, tanggal_hari_ini)
+            
+            return {
+                "status": "success",
+                "message": f"Opname berhasil dikunci (locked) pada tanggal {tanggal_hari_ini}",
+                "nomor_ulok": nomor_ulok,
+                "lingkup_pekerjaan": lingkup_pekerjaan,
+                "tanggal_opname_final": tanggal_hari_ini,
+                "row_index": found_row_index
+            }
+                
+        except gspread.exceptions.WorksheetNotFound as e:
+            print(f"Error: Worksheet tidak ditemukan: {e}")
+            return {
+                "status": "error",
+                "message": f"Worksheet tidak ditemukan: {str(e)}"
+            }
+        except Exception as e:
+            print(f"Error lock_opname: {e}")
+            return {
+                "status": "error",
+                "message": f"Terjadi kesalahan: {str(e)}"
+            }
+
+    def ensure_header_exists_in_sheet(self, spreadsheet, sheet_name, header_name):
+        """
+        Mengecek apakah header tertentu ada di baris 1 pada spreadsheet tertentu.
+        Jika tidak ada, tambahkan kolom baru di akhir header.
+        """
+        try:
+            worksheet = spreadsheet.worksheet(sheet_name)
+            headers = worksheet.row_values(1)
+            
+            if header_name not in headers:
+                next_col = len(headers) + 1
+                col_letter = self._get_col_letter(next_col)
+                worksheet.update(f"{col_letter}1", [[header_name]])
+                print(f"Header '{header_name}' berhasil ditambahkan di kolom {col_letter}")
+                return True
+            return False
+        except Exception as e:
+            print(f"Error ensure_header_exists_in_sheet: {e}")
+            raise
