@@ -2144,7 +2144,8 @@ class GoogleServiceProvider:
                 new_kerja_kurang = existing_kerja_kurang + abs(total_harga_akhir)
                 action_taken = f"Menambahkan {abs(total_harga_akhir)} ke Kerja_Kurang (sebelumnya: {existing_kerja_kurang}, sekarang: {new_kerja_kurang})"
             
-            # === STEP 4: Simpan/Update ke sheet ===
+            # === STEP 4: Simpan/Update ke sheet SUMMARY_OPNAME ===
+            summary_opname_result = {}
             if found_row_index:
                 # Update row yang ada - hanya update kolom yang relevan
                 try:
@@ -2155,19 +2156,15 @@ class GoogleServiceProvider:
                         col_kerja_kurang = summary_headers.index('Kerja_Kurang') + 1
                         summary_sheet.update_cell(found_row_index, col_kerja_kurang, new_kerja_kurang)
                     
-                    return {
-                        "status": "success",
-                        "message": "Data berhasil diupdate",
-                        "action": action_taken,
-                        "row_index": found_row_index,
-                        "total_harga_akhir": total_harga_akhir,
-                        "Kerja_Tambah": new_kerja_tambah if is_positive else existing_kerja_tambah,
-                        "Kerja_Kurang": new_kerja_kurang if not is_positive else existing_kerja_kurang
+                    summary_opname_result = {
+                        "summary_opname_status": "success",
+                        "summary_opname_message": "Data berhasil diupdate di SUMMARY_OPNAME",
+                        "row_index": found_row_index
                     }
                 except ValueError as e:
-                    return {
-                        "status": "error",
-                        "message": f"Kolom Kerja_Tambah atau Kerja_Kurang tidak ditemukan di header: {summary_headers}"
+                    summary_opname_result = {
+                        "summary_opname_status": "error",
+                        "summary_opname_message": f"Kolom Kerja_Tambah atau Kerja_Kurang tidak ditemukan di header: {summary_headers}"
                     }
             else:
                 # Insert row baru - hanya isi kolom yang relevan, yang lain kosong
@@ -2186,14 +2183,148 @@ class GoogleServiceProvider:
                 row_values = [new_row_data.get(header, '') for header in summary_headers]
                 summary_sheet.append_row(row_values, value_input_option='USER_ENTERED')
                 
-                return {
-                    "status": "success",
-                    "message": "Data baru berhasil ditambahkan",
-                    "action": action_taken,
-                    "total_harga_akhir": total_harga_akhir,
-                    "Kerja_Tambah": new_kerja_tambah if is_positive else '',
-                    "Kerja_Kurang": new_kerja_kurang if not is_positive else ''
+                summary_opname_result = {
+                    "summary_opname_status": "success",
+                    "summary_opname_message": "Data baru berhasil ditambahkan di SUMMARY_OPNAME"
                 }
+            
+            # === STEP 5: Simpan/Update ke sheet SUMMARY_DATA ===
+            summary_data_result = {}
+            try:
+                summary_data_sheet = opname_spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
+                summary_data_records = summary_data_sheet.get_all_records()
+                summary_data_headers = summary_data_sheet.row_values(1)
+                
+                print(f"DEBUG SUMMARY_DATA: Mencari Nomor Ulok={target_ulok}, Lingkup={target_lingkup}")
+                print(f"DEBUG SUMMARY_DATA: Total records di sheet = {len(summary_data_records)}")
+                
+                # Cari row yang cocok di SUMMARY_DATA
+                found_row_index_data = None
+                existing_kerja_tambah_data = 0
+                existing_kerja_kurang_data = 0
+                
+                for idx, record in enumerate(summary_data_records):
+                    record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
+                    record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', ''))
+                    
+                    if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                        found_row_index_data = idx + 2  # +2 karena index 0 dan header di row 1
+                        print(f"DEBUG SUMMARY_DATA: Row ditemukan di index {found_row_index_data}")
+                        
+                        # Ambil nilai existing kerja_tambah dan kerja_kurang
+                        kerja_tambah_raw = record.get('Kerja_Tambah', 0)
+                        kerja_kurang_raw = record.get('Kerja_Kurang', 0)
+                        
+                        try:
+                            if isinstance(kerja_tambah_raw, str):
+                                kerja_tambah_raw = kerja_tambah_raw.replace(',', '').replace('.', '').strip()
+                                if kerja_tambah_raw == '' or kerja_tambah_raw == '-':
+                                    kerja_tambah_raw = 0
+                            existing_kerja_tambah_data = float(kerja_tambah_raw)
+                        except (ValueError, TypeError):
+                            existing_kerja_tambah_data = 0
+                        
+                        try:
+                            if isinstance(kerja_kurang_raw, str):
+                                kerja_kurang_raw = kerja_kurang_raw.replace(',', '').replace('.', '').strip()
+                                if kerja_kurang_raw == '' or kerja_kurang_raw == '-':
+                                    kerja_kurang_raw = 0
+                            existing_kerja_kurang_data = float(kerja_kurang_raw)
+                        except (ValueError, TypeError):
+                            existing_kerja_kurang_data = 0
+                        
+                        print(f"DEBUG SUMMARY_DATA: Existing Kerja_Tambah={existing_kerja_tambah_data}, Kerja_Kurang={existing_kerja_kurang_data}")
+                        break
+                
+                # Hitung nilai baru untuk SUMMARY_DATA
+                new_kerja_tambah_data = existing_kerja_tambah_data + total_harga_akhir if is_positive else None
+                new_kerja_kurang_data = existing_kerja_kurang_data + abs(total_harga_akhir) if not is_positive else None
+                
+                print(f"DEBUG SUMMARY_DATA: is_positive={is_positive}, total_harga_akhir={total_harga_akhir}")
+                print(f"DEBUG SUMMARY_DATA: new_kerja_tambah_data={new_kerja_tambah_data}, new_kerja_kurang_data={new_kerja_kurang_data}")
+                
+                if found_row_index_data:
+                    # Update row yang ada di SUMMARY_DATA
+                    try:
+                        if is_positive and new_kerja_tambah_data is not None:
+                            col_kerja_tambah_data = summary_data_headers.index('Kerja_Tambah') + 1
+                            summary_data_sheet.update_cell(found_row_index_data, col_kerja_tambah_data, new_kerja_tambah_data)
+                            print(f"DEBUG SUMMARY_DATA: UPDATE Kerja_Tambah di row {found_row_index_data}, col {col_kerja_tambah_data}, value {new_kerja_tambah_data}")
+                        elif not is_positive and new_kerja_kurang_data is not None:
+                            col_kerja_kurang_data = summary_data_headers.index('Kerja_Kurang') + 1
+                            summary_data_sheet.update_cell(found_row_index_data, col_kerja_kurang_data, new_kerja_kurang_data)
+                            print(f"DEBUG SUMMARY_DATA: UPDATE Kerja_Kurang di row {found_row_index_data}, col {col_kerja_kurang_data}, value {new_kerja_kurang_data}")
+                        
+                        summary_data_result = {
+                            "summary_data_status": "success",
+                            "summary_data_message": "Data berhasil diupdate di SUMMARY_DATA",
+                            "summary_data_row_index": found_row_index_data,
+                            "summary_data_kerja_tambah": new_kerja_tambah_data if is_positive else existing_kerja_tambah_data,
+                            "summary_data_kerja_kurang": new_kerja_kurang_data if not is_positive else existing_kerja_kurang_data
+                        }
+                    except ValueError as e:
+                        print(f"DEBUG SUMMARY_DATA: ERROR - Kolom tidak ditemukan: {e}")
+                        print(f"DEBUG SUMMARY_DATA: Headers = {summary_data_headers}")
+                        summary_data_result = {
+                            "summary_data_status": "error",
+                            "summary_data_message": f"Kolom Kerja_Tambah atau Kerja_Kurang tidak ditemukan di SUMMARY_DATA header: {summary_data_headers}"
+                        }
+                else:
+                    # Row tidak ditemukan - tidak insert baru, karena data harus sudah ada dari RAB
+                    print(f"DEBUG SUMMARY_DATA: Row TIDAK ditemukan untuk Ulok={target_ulok}, Lingkup={target_lingkup}")
+                    print(f"DEBUG SUMMARY_DATA: Mencoba update langsung ke cell jika kolom ada...")
+                    
+                    # Karena row seharusnya sudah ada dari copy_to_summary_sheet (RAB), 
+                    # kita perlu mencari dengan cara lain atau insert baru
+                    # Insert row baru di SUMMARY_DATA
+                    new_row_data_summary = {
+                        'Nomor Ulok': nomor_ulok,
+                        'Lingkup_Pekerjaan': lingkup_pekerjaan
+                    }
+                    
+                    if is_positive and new_kerja_tambah_data is not None:
+                        new_row_data_summary['Kerja_Tambah'] = new_kerja_tambah_data
+                    elif not is_positive and new_kerja_kurang_data is not None:
+                        new_row_data_summary['Kerja_Kurang'] = new_kerja_kurang_data
+                    
+                    print(f"DEBUG SUMMARY_DATA: INSERT new row = {new_row_data_summary}")
+                    
+                    row_values_data = [new_row_data_summary.get(header, '') for header in summary_data_headers]
+                    summary_data_sheet.append_row(row_values_data, value_input_option='USER_ENTERED')
+                    
+                    summary_data_result = {
+                        "summary_data_status": "success",
+                        "summary_data_message": "Data baru berhasil ditambahkan di SUMMARY_DATA",
+                        "summary_data_kerja_tambah": new_kerja_tambah_data if is_positive else 0,
+                        "summary_data_kerja_kurang": new_kerja_kurang_data if not is_positive else 0
+                    }
+                    
+            except gspread.exceptions.WorksheetNotFound as e:
+                print(f"DEBUG SUMMARY_DATA: ERROR - Worksheet tidak ditemukan: {e}")
+                summary_data_result = {
+                    "summary_data_status": "error",
+                    "summary_data_message": f"Worksheet SUMMARY_DATA tidak ditemukan: {str(e)}"
+                }
+            except Exception as e:
+                print(f"DEBUG SUMMARY_DATA: ERROR - Exception: {e}")
+                import traceback
+                traceback.print_exc()
+                summary_data_result = {
+                    "summary_data_status": "error",
+                    "summary_data_message": f"Error saat update SUMMARY_DATA: {str(e)}"
+                }
+            
+            # Return combined result
+            return {
+                "status": "success",
+                "message": "Data berhasil diproses",
+                "action": action_taken,
+                "total_harga_akhir": total_harga_akhir,
+                "Kerja_Tambah": new_kerja_tambah if is_positive else existing_kerja_tambah,
+                "Kerja_Kurang": new_kerja_kurang if not is_positive else existing_kerja_kurang,
+                **summary_opname_result,
+                **summary_data_result
+            }
                 
         except gspread.exceptions.WorksheetNotFound as e:
             print(f"Error: Worksheet tidak ditemukan: {e}")
@@ -2388,8 +2519,68 @@ class GoogleServiceProvider:
                 summary_headers = summary_sheet.row_values(1)
                 col_index = summary_headers.index(col_name) + 1
             
-            # Update tanggal_opname_final
+            # Update tanggal_opname_final di SUMMARY_OPNAME
             summary_sheet.update_cell(found_row_index, col_index, tanggal_hari_ini)
+            
+            summary_opname_result = {
+                "summary_opname_status": "success",
+                "summary_opname_message": f"tanggal_opname_final berhasil diupdate di SUMMARY_OPNAME",
+                "summary_opname_row_index": found_row_index
+            }
+            
+            # === UPDATE JUGA KE SUMMARY_DATA_SHEET_NAME ===
+            summary_data_result = {}
+            try:
+                summary_data_sheet = opname_spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
+                summary_data_records = summary_data_sheet.get_all_records()
+                summary_data_headers = summary_data_sheet.row_values(1)
+                
+                # Cari row yang cocok di SUMMARY_DATA
+                found_row_index_data = None
+                for idx, record in enumerate(summary_data_records):
+                    record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
+                    record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', ''))
+                    
+                    if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                        found_row_index_data = idx + 2  # +2 karena index 0 dan header di row 1
+                        break
+                
+                if found_row_index_data:
+                    # Cari index kolom tanggal_opname_final di SUMMARY_DATA
+                    try:
+                        col_index_data = summary_data_headers.index(col_name) + 1
+                    except ValueError:
+                        # Jika kolom tidak ada, tambahkan kolom baru
+                        print(f"Kolom '{col_name}' tidak ditemukan di SUMMARY_DATA, mencoba menambahkan...")
+                        self.ensure_header_exists_in_sheet(opname_spreadsheet, config.SUMMARY_DATA_SHEET_NAME, col_name)
+                        # Refresh headers
+                        summary_data_headers = summary_data_sheet.row_values(1)
+                        col_index_data = summary_data_headers.index(col_name) + 1
+                    
+                    # Update tanggal_opname_final di SUMMARY_DATA
+                    summary_data_sheet.update_cell(found_row_index_data, col_index_data, tanggal_hari_ini)
+                    
+                    summary_data_result = {
+                        "summary_data_status": "success",
+                        "summary_data_message": f"tanggal_opname_final berhasil diupdate di SUMMARY_DATA",
+                        "summary_data_row_index": found_row_index_data
+                    }
+                else:
+                    summary_data_result = {
+                        "summary_data_status": "warning",
+                        "summary_data_message": f"Data tidak ditemukan di SUMMARY_DATA untuk Nomor Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}"
+                    }
+                    
+            except gspread.exceptions.WorksheetNotFound as e:
+                summary_data_result = {
+                    "summary_data_status": "error",
+                    "summary_data_message": f"Worksheet SUMMARY_DATA tidak ditemukan: {str(e)}"
+                }
+            except Exception as e:
+                summary_data_result = {
+                    "summary_data_status": "error",
+                    "summary_data_message": f"Error saat update SUMMARY_DATA: {str(e)}"
+                }
             
             return {
                 "status": "success",
@@ -2397,7 +2588,8 @@ class GoogleServiceProvider:
                 "nomor_ulok": nomor_ulok,
                 "lingkup_pekerjaan": lingkup_pekerjaan,
                 "tanggal_opname_final": tanggal_hari_ini,
-                "row_index": found_row_index
+                **summary_opname_result,
+                **summary_data_result
             }
                 
         except gspread.exceptions.WorksheetNotFound as e:
