@@ -324,7 +324,7 @@ def submit_rab():
             return jsonify({
                 "status": "error",
                 "message": (
-                    f"RAB untuk Nomor Ulok {nomor_ulok_raw} dengan lingkup {lingkup_pekerjaan} "
+                    f"RAB untuk Nomor Ulok {format_ulok(nomor_ulok_raw)} dengan lingkup {lingkup_pekerjaan} "
                     "sudah pernah diajukan dan sedang diproses atau sudah disetujui."
                 )
             }), 409
