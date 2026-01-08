@@ -20,10 +20,14 @@ from spk_generator import create_spk_pdf
 from pengawasan_email_logic import get_email_details, FORM_LINKS
 # Tambahkan import ini di bagian paling atas file app.py jika belum ada
 from werkzeug.utils import secure_filename
+from document_api import doc_bp
+from data_api import data_bp
+
 load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 Megabytes
+
 CORS(app,
      origins=[
          "http://127.0.0.1:5500",
@@ -50,8 +54,8 @@ CORS(app,
 
 google_provider = GoogleServiceProvider()
 
-from data_api import data_bp
 app.register_blueprint(data_bp)
+app.register_blueprint(doc_bp)
 app.json.sort_keys = False
 
 # --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---

@@ -3,6 +3,8 @@ import io
 import re
 import gspread
 import json
+import time
+from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -25,29 +27,51 @@ class GoogleServiceProvider:
             'https://www.googleapis.com/auth/drive.file',
             'https://www.googleapis.com/auth/calendar'
         ]
-        self.creds = None
         
-        secret_dir = '/etc/secrets/'
-        token_path = os.path.join(secret_dir, 'token.json')
-
-        if not os.path.exists(secret_dir):
-            token_path = 'token.json'
-
-        if os.path.exists(token_path):
-            self.creds = Credentials.from_authorized_user_file(token_path, self.scopes)
+        # --- 1. LOAD CREDENTIALS SPARTA (UTAMA) ---
+        self.sparta_creds = self._load_credentials('token.json')
         
-        if not self.creds or not self.creds.valid:
-            if self.creds and self.creds.expired and self.creds.refresh_token:
-                self.creds.refresh(Request())
-            else:
-                raise Exception("CRITICAL: token.json not found or invalid. Please re-authenticate locally using generate_token.py.")
-
-        self.gspread_client = gspread.authorize(self.creds)
+        # Inisialisasi Service Sparta (Default untuk fitur lama)
+        self.gspread_client = gspread.authorize(self.sparta_creds)
         self.sheet = self.gspread_client.open_by_key(config.SPREADSHEET_ID)
         self.data_entry_sheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
-        self.gmail_service = build('gmail', 'v1', credentials=self.creds)
-        self.drive_service = build('drive', 'v3', credentials=self.creds)
-        self.calendar_service = build('calendar', 'v3', credentials=self.creds)
+        
+        self.drive_service = build('drive', 'v3', credentials=self.sparta_creds) # Sparta Drive
+        self.gmail_service = build('gmail', 'v1', credentials=self.sparta_creds)
+        self.calendar_service = build('calendar', 'v3', credentials=self.sparta_creds)
+
+        # --- 2. LOAD CREDENTIALS PENYIMPANAN DOKUMEN (KEDUA) ---
+        try:
+            self.doc_creds = self._load_credentials('token_doc.json')
+            
+            # Inisialisasi Service Dokumen (Khusus fitur baru)
+            self.doc_gspread_client = gspread.authorize(self.doc_creds)
+            # Pastikan config.DOC_SPREADSHEET_ID sudah diset di config.py
+            if getattr(config, 'DOC_SPREADSHEET_ID', None):
+                self.doc_sheet = self.doc_gspread_client.open_by_key(config.DOC_SPREADSHEET_ID)
+            
+            self.doc_drive_service = build('drive', 'v3', credentials=self.doc_creds) # Doc Drive
+            print("✅ Token Dokumen berhasil dimuat.")
+        except Exception as e:
+            print(f"⚠️ Warning: Token Dokumen gagal dimuat: {e}")
+            self.doc_drive_service = None
+            self.doc_sheet = None
+
+    def _load_credentials(self, token_filename):
+        """Helper untuk memuat credentials dari file token tertentu"""
+        secret_dir = '/etc/secrets/'
+        token_path = os.path.join(secret_dir, token_filename)
+
+        if not os.path.exists(secret_dir):
+            token_path = token_filename
+
+        if os.path.exists(token_path):
+            creds = Credentials.from_authorized_user_file(token_path, self.scopes)
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            return creds
+        else:
+            raise Exception(f"Token file {token_filename} not found.")
 
     def get_cabang_code(self, cabang_name):
         branch_to_ulok_map = {
@@ -2624,3 +2648,82 @@ class GoogleServiceProvider:
         except Exception as e:
             print(f"Error ensure_header_exists_in_sheet: {e}")
             raise
+
+    def _escape_name_for_query(self, name: str) -> str:
+        return name.replace("'", "\\'")
+
+    def get_or_create_folder(self, name: str, parent_id: str):
+        # Gunakan doc_drive_service
+        service = self.doc_drive_service 
+        
+        safe_name = self._escape_name_for_query(name)
+        query = (
+            f"name='{safe_name}' and '{parent_id}' in parents and "
+            f"mimeType='application/vnd.google-apps.folder' and trashed=false"
+        )
+        # Ubah self.drive_service -> service
+        res = service.files().list(q=query, fields="files(id)").execute()
+        items = res.get("files", [])
+        if items:
+            return items[0]["id"]
+
+        folder_metadata = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id],
+        }
+        # Ubah self.drive_service -> service
+        folder = service.files().create(body=folder_metadata, fields="id").execute()
+        return folder["id"]
+
+    def upload_file_simple(self, folder_id, filename, mime_type, raw_bytes, max_retry=2):
+        # Gunakan doc_drive_service
+        service = self.doc_drive_service
+
+        for attempt in range(max_retry + 1):
+            try:
+                stream = io.BytesIO(raw_bytes)
+                stream.seek(0)
+                media = MediaIoBaseUpload(stream, mimetype=mime_type, resumable=False)
+                metadata = {"name": filename, "parents": [folder_id]}
+
+                # Ubah self.drive_service -> service
+                uploaded = service.files().create(
+                    body=metadata,
+                    media_body=media,
+                    fields="id, webViewLink, thumbnailLink, name, mimeType"
+                ).execute()
+                
+                try:
+                    service.permissions().create(
+                        fileId=uploaded.get('id'),
+                        body={"type": "anyone", "role": "reader"},
+                        fields="id"
+                    ).execute()
+                except Exception:
+                    pass
+
+                time.sleep(0.25)
+                return uploaded
+            except HttpError as e:
+                status = getattr(e, "status_code", None)
+                if status in (429, 500, 502, 503, 504) and attempt < max_retry:
+                    time.sleep(0.8 * (attempt + 1)) # Exponential backoff
+                    continue
+                raise e
+
+    def delete_drive_file(self, file_id):
+        try:
+            self.drive_service.files().delete(fileId=file_id).execute()
+        except Exception as e:
+            print(f"Gagal hapus file {file_id}: {e}")
+
+    def list_folder_files(self, folder_id):
+        """List semua file dalam folder tertentu"""
+        try:
+            query = f"'{folder_id}' in parents and trashed = false"
+            res = self.drive_service.files().list(q=query, fields="files(id, name)").execute()
+            return res.get("files", [])
+        except Exception as e:
+            print(f"Error list_folder_files: {e}")
+            return []
