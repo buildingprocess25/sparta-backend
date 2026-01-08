@@ -47,8 +47,8 @@ class GoogleServiceProvider:
             # Inisialisasi Service Dokumen (Khusus fitur baru)
             self.doc_gspread_client = gspread.authorize(self.doc_creds)
             # Pastikan config.DOC_SPREADSHEET_ID sudah diset di config.py
-            if getattr(config, 'DOC_SPREADSHEET_ID', None):
-                self.doc_sheet = self.doc_gspread_client.open_by_key(config.DOC_SPREADSHEET_ID)
+            if getattr(config, 'SPREADSHEET_ID', None):
+                self.doc_sheet = self.doc_gspread_client.open_by_key(config.SPREADSHEET_ID)
             
             self.doc_drive_service = build('drive', 'v3', credentials=self.doc_creds) # Doc Drive
             print("✅ Token Dokumen berhasil dimuat.")
