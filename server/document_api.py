@@ -63,6 +63,8 @@ def login_doc():
         allowed_roles = [
             "BRANCH BUILDING SUPPORT",
             "BRANCH BUILDING COORDINATOR",
+            "BRANCH BUILDING & MAINTENANCE MANAGER",
+            "BRANCH BUILDING & MAINTENANCE ADMINISTRATOR",
         ]
 
         for row in records:
@@ -304,7 +306,7 @@ def update_document(kode_toko):
         # ==============================================================================
         # SELESAI IMPLEMENTASI DELETE LOGIC
         # ==============================================================================
-        
+
         # Logic Upload Baru
         new_file_links = []
         category_cache = {} # Cache folder ID kategori

@@ -44,7 +44,9 @@ CORS(app,
          "https://frontend-form-virid.vercel.app/",
          "https://script.google.com",
          "https://opnamebnm.vercel.app",
-         "https://opnamebnm.vercel.app/"
+         "https://opnamebnm.vercel.app/",
+         "https://penyimpanan-dokumen.vercel.app",
+         "https://penyimpanan-dokumen.vercel.app/",
 
      ],
      methods=["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
