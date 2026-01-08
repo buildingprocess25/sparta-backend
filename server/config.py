@@ -13,8 +13,8 @@ PENGAWASAN_SPREADSHEET_ID = "1zy6BBKJwwmSSvFrMZSZG39pf0YgmjXockZNf10_OFLo"
 # ID Folder Google Drive untuk upload file SPK dari form pengawasan
 INPUT_PIC_DRIVE_FOLDER_ID = "1gkGZhOJYVo7zv7sZnUIOYAafL-NbNHf8"
 OPNAME_SHEET_ID = "1ssXGBJ-D4O8JVB1emOBuqcdmBKvdymciVsv7eMaBb64"
-DOC_SHEET_NAME = os.getenv("DOC_SHEET_NAME", "Sheet1")
-DOC_DRIVE_ROOT_ID = os.getenv("DOC_DRIVE_ROOT_ID") # ID Folder Root Drive Penyimpanan
+DOC_SHEET_NAME = os.getenv("SHEET_NAME", "Sheet1")
+DOC_DRIVE_ROOT_ID = os.getenv("DRIVE_ROOT_ID") # ID Folder Root Drive Penyimpanan
 
 # Nama-nama sheet
 DATA_ENTRY_SHEET_NAME = "Form2"
