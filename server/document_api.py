@@ -248,104 +248,124 @@ def update_document(kode_toko):
                     old_files_list.append({"category": parts[0], "filename": parts[1], "link": parts[2]})
 
         # ==============================================================================
-        # MULAI IMPLEMENTASI DELETE LOGIC (VERSI 2 TOKEN)
+        # MULAI IMPLEMENTASI DELETE LOGIC (EXPLICIT DELETE FLAG)
         # ==============================================================================
         
-        # PENTING: Jika files kosong, SKIP delete logic dan pertahankan semua file lama
-        if files:
-            # 1. Ambil daftar folder kategori yang ada di Drive saat ini (subfolder dari toko)
-            # PENTING: Menggunakan provider.doc_drive_service (Token Dokumen)
-            try:
-                subfolders = provider.doc_drive_service.files().list(
-                    q=f"'{toko_folder_id}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
+        # Ambil daftar folder kategori yang ada di Drive
+        category_folders_map = {}
+        existing_files_drive = []
+        try:
+            subfolders = provider.doc_drive_service.files().list(
+                q=f"'{toko_folder_id}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'",
+                fields="files(id, name)"
+            ).execute().get("files", [])
+            
+            category_folders_map = {sf["name"]: sf["id"] for sf in subfolders}
+
+            # Ambil semua file fisik yang ada di dalam folder-folder tersebut
+            for cat_name, folder_id in category_folders_map.items():
+                res_files = provider.doc_drive_service.files().list(
+                    q=f"'{folder_id}' in parents and trashed = false",
                     fields="files(id, name)"
-                ).execute().get("files", [])
-                
-                # Map nama kategori ke ID foldernya
-                category_folders_map = {sf["name"]: sf["id"] for sf in subfolders}
+                ).execute()
+                for f in res_files.get("files", []):
+                    existing_files_drive.append({
+                        "id": f["id"],
+                        "name": f["name"],
+                        "category": cat_name
+                    })
+        except Exception as e:
+            print(f"⚠️ Error membaca folder Drive: {e}")
 
-                # 2. Ambil semua file fisik yang ada di dalam folder-folder tersebut
-                existing_files_drive = []
-                for cat_name, folder_id in category_folders_map.items():
-                    res_files = provider.doc_drive_service.files().list(
-                        q=f"'{folder_id}' in parents and trashed = false",
-                        fields="files(id, name)"
-                    ).execute()
-                    for f in res_files.get("files", []):
-                        existing_files_drive.append({
-                            "id": f["id"],
-                            "name": f["name"],
-                            "category": cat_name
-                        })
+        # Pisahkan file berdasarkan tipe:
+        # 1. files_to_delete: file dengan flag deleted=true
+        # 2. files_to_upload: file baru dengan data base64
+        # 3. files_to_keep: file lama tanpa perubahan (tidak ada data, tidak deleted)
+        
+        files_to_delete = []
+        files_to_upload = []
+        files_to_keep_keys = set()  # (category, filename) yang harus dipertahankan
+        
+        for f in files:
+            category = (f.get("category") or "pendukung").strip()
+            filename = f.get("filename")
+            
+            if f.get("deleted") == True:
+                # File ditandai untuk dihapus
+                files_to_delete.append({"category": category, "filename": filename})
+            elif f.get("data"):
+                # File baru dengan data base64
+                files_to_upload.append(f)
+                files_to_keep_keys.add((category, filename))
+            else:
+                # File lama yang harus dipertahankan
+                files_to_keep_keys.add((category, filename))
 
-                # 3. Tentukan file mana yang harus dihapus
-                # Logic: File ada di Drive, TAPI tidak ada di list 'files' yang dikirim Frontend = HAPUS
-                
-                # Kumpulkan (category, filename) dari request frontend
-                incoming_keys = set()
-                for f in files:
-                    c = (f.get("category") or "pendukung").strip()
-                    n = f.get("filename")
-                    if n:
-                        incoming_keys.add((c, n))
-
-                # Filter file drive yang tidak ada di incoming_keys
-                to_delete = [f for f in existing_files_drive if (f["category"], f["name"]) not in incoming_keys]
-
-                # 4. Eksekusi Hapus di Google Drive
-                for f in to_delete:
-                    try:
-                        # PENTING: Menggunakan provider.doc_drive_service
-                        provider.doc_drive_service.files().delete(fileId=f["id"]).execute()
-                        print(f"🗑️ Hapus file lama di Drive (Akun Doc): {f['name']} (Kategori: {f['category']})")
-                    except Exception as del_err:
-                        print(f"⚠️ Gagal hapus file {f['name']}: {del_err}")
-
-            except Exception as e:
-                print(f"⚠️ Error pada proses sinkronisasi delete file: {e}")
-                # Kita print error saja, jangan raise exception agar proses update data Sheet tetap jalan
-        else:
-            print("ℹ️ Files kosong, skip delete logic - pertahankan semua file lama")
+        # Eksekusi hapus file yang ditandai deleted=true
+        for del_file in files_to_delete:
+            # Cari file di Drive berdasarkan category dan filename
+            drive_file = next(
+                (f for f in existing_files_drive 
+                 if f["category"] == del_file["category"] and f["name"] == del_file["filename"]), 
+                None
+            )
+            if drive_file:
+                try:
+                    provider.doc_drive_service.files().delete(fileId=drive_file["id"]).execute()
+                    print(f"🗑️ Hapus file di Drive: {drive_file['name']} (Kategori: {drive_file['category']})")
+                except Exception as del_err:
+                    print(f"⚠️ Gagal hapus file {drive_file['name']}: {del_err}")
         
         # ==============================================================================
         # SELESAI IMPLEMENTASI DELETE LOGIC
         # ==============================================================================
 
-        # Logic Upload Baru
+        # Logic Upload Baru & Pertahankan File Lama
         new_file_links = []
-        category_cache = {} # Cache folder ID kategori
+        category_cache = {}
 
-        # Jika files kosong, pertahankan semua file lama
-        if not files:
-            new_file_links = [f"{x['category']}|{x['filename']}|{x['link']}" for x in old_files_list]
-        else:
-            for f in files:
-                category = (f.get("category") or "pendukung").strip()
-                filename = f.get("filename")
-                
-                # Cek jika file baru (ada data base64)
-                if f.get("data"):
-                    # Pastikan folder kategori ada
-                    if category not in category_cache:
-                        category_cache[category] = provider.get_or_create_folder(category, toko_folder_id)
-                    
-                    raw = decode_base64_maybe_with_prefix(f["data"])
-                    mime = guess_mime(filename, f.get("type"))
-                    
-                    uploaded = provider.upload_file_simple(category_cache[category], filename, mime, raw)
-                    
-                    # Buat Link
-                    link = uploaded.get("webViewLink")
-                    fid = link.split("/d/")[-1].split("/")[0] if link else ""
-                    direct = f"https://drive.google.com/uc?export=view&id={fid}" if fid else ""
-                    
-                    new_file_links.append(f"{category}|{filename}|{direct}")
-                else:
-                    # File lama (pertahankan)
-                    # Cari link lama dari old_files_list
-                    existing = next((x for x in old_files_list if x['filename'] == filename and x['category'] == category), None)
-                    if existing:
-                        new_file_links.append(f"{existing['category']}|{existing['filename']}|{existing['link']}")
+        # 1. Pertahankan semua file lama yang TIDAK dihapus
+        deleted_keys = set((f["category"], f["filename"]) for f in files_to_delete)
+        for old_file in old_files_list:
+            key = (old_file["category"], old_file["filename"])
+            # Pertahankan jika tidak di-delete DAN tidak di-replace dengan file baru
+            # (jika ada file baru dengan nama sama, jangan duplikat)
+            new_upload_filenames = set((f.get("category", "pendukung").strip(), f.get("filename")) for f in files_to_upload)
+            if key not in deleted_keys and key not in new_upload_filenames:
+                new_file_links.append(f"{old_file['category']}|{old_file['filename']}|{old_file['link']}")
+
+        # 2. Upload file baru
+        for f in files_to_upload:
+            category = (f.get("category") or "pendukung").strip()
+            filename = f.get("filename")
+            
+            # Pastikan folder kategori ada
+            if category not in category_cache:
+                category_cache[category] = provider.get_or_create_folder(category, toko_folder_id)
+            
+            # Hapus file lama dengan nama sama jika ada (replace)
+            old_drive_file = next(
+                (df for df in existing_files_drive if df["category"] == category and df["name"] == filename),
+                None
+            )
+            if old_drive_file:
+                try:
+                    provider.doc_drive_service.files().delete(fileId=old_drive_file["id"]).execute()
+                    print(f"🔄 Replace file di Drive: {filename}")
+                except Exception as e:
+                    print(f"⚠️ Gagal hapus file lama untuk replace: {e}")
+            
+            raw = decode_base64_maybe_with_prefix(f["data"])
+            mime = guess_mime(filename, f.get("type"))
+            
+            uploaded = provider.upload_file_simple(category_cache[category], filename, mime, raw)
+            
+            # Buat Link
+            link = uploaded.get("webViewLink")
+            fid = link.split("/d/")[-1].split("/")[0] if link else ""
+            direct = f"https://drive.google.com/uc?export=view&id={fid}" if fid else ""
+            
+            new_file_links.append(f"{category}|{filename}|{direct}")
 
         # Update Sheet
         # Hati-hati urutan kolom harus sama persis dengan sheet
