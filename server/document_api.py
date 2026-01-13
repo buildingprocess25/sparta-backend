@@ -220,6 +220,9 @@ def update_document(kode_toko):
         data = request.get_json()
         files = data.get("files", [])
         email = data.get("email", "")
+        
+        # Capture timestamp saat update dimulai
+        update_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Buka Sheet
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
@@ -383,11 +386,11 @@ def update_document(kode_toko):
             data.get("luas_gudang", old_data.get("luas_gudang")),
             old_folder_link,
             ", ".join(new_file_links),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            update_timestamp,  # timestamp diupdate saat ada perubahan
             email  # last_edit
         ]])
 
-        return jsonify({"ok": True, "message": "Berhasil update", "last_edit": email})
+        return jsonify({"ok": True, "message": "Berhasil update", "last_edit": email, "updated_at": update_timestamp})
 
     except Exception as e:
         traceback.print_exc()
