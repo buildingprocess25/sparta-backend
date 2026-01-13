@@ -135,6 +135,7 @@ def save_document_base64():
         luas_parkir = payload.get("luas_parkir", "")
         luas_gudang = payload.get("luas_gudang", "")
         files = payload.get("files", [])
+        email = payload.get("email", "")
 
         if not all([kode_toko, nama_toko, cabang]):
             return jsonify({"detail": "Data toko belum lengkap."}), 400
@@ -197,13 +198,15 @@ def save_document_base64():
             kode_toko, nama_toko, cabang, luas_sales, luas_parkir, luas_gudang,
             f"https://drive.google.com/drive/folders/{toko_folder}",
             ", ".join(file_links),
-            now
+            now,
+            email  # last_edit
         ])
 
         return jsonify({
             "ok": True,
             "message": f"{len(file_links)} file berhasil diunggah",
-            "folder_link": f"https://drive.google.com/drive/folders/{toko_folder}"
+            "folder_link": f"https://drive.google.com/drive/folders/{toko_folder}",
+            "last_edit": email
         })
 
     except Exception as e:
@@ -216,6 +219,7 @@ def update_document(kode_toko):
     try:
         data = request.get_json()
         files = data.get("files", [])
+        email = data.get("email", "")
 
         # Buka Sheet
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
@@ -369,7 +373,7 @@ def update_document(kode_toko):
 
         # Update Sheet
         # Hati-hati urutan kolom harus sama persis dengan sheet
-        cell_range = f"A{row_index}:I{row_index}"
+        cell_range = f"A{row_index}:J{row_index}"
         ws.update(cell_range, [[
             old_data.get("kode_toko"),
             old_data.get("nama_toko"),
@@ -379,10 +383,11 @@ def update_document(kode_toko):
             data.get("luas_gudang", old_data.get("luas_gudang")),
             old_folder_link,
             ", ".join(new_file_links),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            email  # last_edit
         ]])
 
-        return jsonify({"ok": True, "message": "Berhasil update"})
+        return jsonify({"ok": True, "message": "Berhasil update", "last_edit": email})
 
     except Exception as e:
         traceback.print_exc()
