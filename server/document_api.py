@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
+import pytz
 import json
 import base64
 import re
@@ -193,7 +194,8 @@ def save_document_base64():
                 print(f"Gagal upload {filename}: {e}")
 
         # 4. Simpan ke Sheet
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+        now = datetime.now(jakarta_tz).strftime("%Y-%m-%d %H:%M:%S")
         ws.append_row([
             kode_toko, nama_toko, cabang, luas_sales, luas_parkir, luas_gudang,
             f"https://drive.google.com/drive/folders/{toko_folder}",
@@ -221,8 +223,9 @@ def update_document(kode_toko):
         files = data.get("files", [])
         email = data.get("email", "")
         
-        # Capture timestamp saat update dimulai
-        update_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Capture timestamp saat update dimulai (Jakarta timezone)
+        jakarta_tz = pytz.timezone('Asia/Jakarta')
+        update_timestamp = datetime.now(jakarta_tz).strftime("%Y-%m-%d %H:%M:%S")
 
         # Buka Sheet
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
