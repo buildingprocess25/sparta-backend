@@ -2061,6 +2061,8 @@ def handle_spk_approval():
             try:
                 serah_terima_data = {
                     'kode_toko': row_data.get('Kode Toko', row_data.get('kode_toko', '')),
+                    'lingkup_pekerjaan': row_data.get('Lingkup Pekerjaan', row_data.get('Lingkup_Pekerjaan', row_data.get('lingkup_pekerjaan', ''))),
+                    'kontraktor': row_data.get('Nama Kontraktor', row_data.get('nama_kontraktor', row_data.get('kontraktor', ''))),
                     'nama_toko': row_data.get('Nama_Toko', row_data.get('nama_toko', '')),
                     'kode_ulok': nomor_ulok_spk,
                     'cabang': cabang
