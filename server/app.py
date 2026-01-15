@@ -2065,6 +2065,7 @@ def handle_spk_approval():
                     'kode_ulok': nomor_ulok_spk,
                     'cabang': cabang
                 }
+                print(f"DEBUG: Attempting to insert serah terima data: {serah_terima_data}")
                 google_provider.append_to_dynamic_sheet(
                     config.PENGAWASAN_SPREADSHEET_ID,
                     config.SUMMARY_SERAH_TERIMA_SHEET_NAME,
@@ -2073,6 +2074,7 @@ def handle_spk_approval():
                 print(f"Data berhasil diinsert ke Summary Serah Terima untuk Ulok: {nomor_ulok_spk}")
             except Exception as serah_terima_error:
                 print(f"Warning: Gagal insert ke Summary Serah Terima: {serah_terima_error}")
+                traceback.print_exc()
                 # Tidak raise error agar proses approval tetap berjalan
             # --- END INSERT SUMMARY SERAH TERIMA ---
             
