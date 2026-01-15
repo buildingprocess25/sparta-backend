@@ -9,7 +9,7 @@ SPREADSHEET_ID_RAB_2 = "1P_3cGMS1jOAA6nc398idLHHIhY3r4XANlSMzDdlE6cc"
 PDF_STORAGE_FOLDER_ID = "1lvPxOwNILXHmagVfPGkVlNEtfv3U4Emj"
 KONTRAKTOR_SHEET_ID = "1s95mAc0yXEyDwUDyyOzsDdIqIPEETZkA62_jQQBWXyw"
 # ID Spreadsheet untuk semua data Pengawasan
-PENGAWASAN_SPREADSHEET_ID = "1zy6BBKJwwmSSvFrMZSZG39pf0YgmjXockZNf10_OFLo"
+PENGAWASAN_SPREADSHEET_ID = "1CcJQSk7l-A08R7vlOngG5Sh_k8XYZIr98xHSS-Ahcug"
 # ID Folder Google Drive untuk upload file SPK dari form pengawasan
 INPUT_PIC_DRIVE_FOLDER_ID = "1gkGZhOJYVo7zv7sZnUIOYAafL-NbNHf8"
 OPNAME_SHEET_ID = "1ssXGBJ-D4O8JVB1emOBuqcdmBKvdymciVsv7eMaBb64"
@@ -36,6 +36,7 @@ DAY_GANTT_CHART_SHEET_NAME = "day_gantt_chart"
 SUMMARY_OPNAME_SHEET_NAME = "summary_opname"
 OPNAME_SHEET_NAME = "opname_final"
 SUMMARY_DATA_SHEET_NAME = "summary"
+SUMMARY_SERAH_TERIMA_SHEET_NAME = "summary_serahterima"
 
 # Nama sheet dinamis akan ditangani di kode, contoh: "DataH2", "SerahTerima"
 

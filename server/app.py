@@ -2057,6 +2057,25 @@ def handle_spk_approval():
                 print(f"Warning: Gagal update ke Summary Data: {summary_error}")
             # --- END UPDATE SUMMARY DATA ---
             
+            # --- INSERT DATA KE SUMMARY SERAH TERIMA SHEET ---
+            try:
+                serah_terima_data = {
+                    'kode_toko': row_data.get('Kode Toko', row_data.get('kode_toko', '')),
+                    'nama_toko': row_data.get('Nama_Toko', row_data.get('nama_toko', '')),
+                    'kode_ulok': nomor_ulok_spk,
+                    'cabang': cabang
+                }
+                google_provider.append_to_dynamic_sheet(
+                    config.PENGAWASAN_SPREADSHEET_ID,
+                    config.SUMMARY_SERAH_TERIMA_SHEET_NAME,
+                    serah_terima_data
+                )
+                print(f"Data berhasil diinsert ke Summary Serah Terima untuk Ulok: {nomor_ulok_spk}")
+            except Exception as serah_terima_error:
+                print(f"Warning: Gagal insert ke Summary Serah Terima: {serah_terima_error}")
+                # Tidak raise error agar proses approval tetap berjalan
+            # --- END INSERT SUMMARY SERAH TERIMA ---
+            
             jenis_toko = row_data.get('Jenis_Toko', row_data.get('Proyek', 'N/A'))
             nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
             lingkup_pekerjaan = row_data.get('Lingkup Pekerjaan', row_data.get('Lingkup_Pekerjaan', row_data.get('lingkup_pekerjaan', 'N/A')))
