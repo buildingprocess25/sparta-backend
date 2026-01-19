@@ -135,12 +135,12 @@ def save_document_base64():
         luas_sales = payload.get("luas_sales", "")
         luas_parkir = payload.get("luas_parkir", "")
         luas_gudang = payload.get("luas_gudang", "")
-        # luas_bangunan_lantai_1 = payload.get("luas_bangunan_lantai_1", "")
-        # luas_bangunan_lantai_2 = payload.get("luas_bangunan_lantai_2", "")
-        # luas_bangunan_lantai_3 = payload.get("luas_bangunan_lantai_3", "")
-        # total_luas_bangunan = payload.get("total_luas_bangunan", "")
-        # luas_area_terbuka = payload.get("luas_area_terbuka", "")
-        # tinggi_plafon = payload.get("tinggi_plafon", "")
+        luas_bangunan_lantai_1 = payload.get("luas_bangunan_lantai_1", "")
+        luas_bangunan_lantai_2 = payload.get("luas_bangunan_lantai_2", "")
+        luas_bangunan_lantai_3 = payload.get("luas_bangunan_lantai_3", "")
+        total_luas_bangunan = payload.get("total_luas_bangunan", "")
+        luas_area_terbuka = payload.get("luas_area_terbuka", "")
+        tinggi_plafon = payload.get("tinggi_plafon", "")
         files = payload.get("files", [])
         email = payload.get("email", "")
 
@@ -203,9 +203,7 @@ def save_document_base64():
         jakarta_tz = pytz.timezone('Asia/Jakarta')
         now = datetime.now(jakarta_tz).strftime("%Y-%m-%d %H:%M:%S")
         ws.append_row([
-            kode_toko, nama_toko, cabang, luas_sales, luas_parkir, luas_gudang,
-            # luas_bangunan_lantai_1, luas_bangunan_lantai_2, luas_bangunan_lantai_3,
-            # total_luas_bangunan, luas_area_terbuka, tinggi_plafon,
+            kode_toko, nama_toko, cabang, luas_sales, luas_parkir, luas_gudang, luas_bangunan_lantai_1, luas_bangunan_lantai_2, luas_bangunan_lantai_3, total_luas_bangunan, luas_area_terbuka, tinggi_plafon,
             f"https://drive.google.com/drive/folders/{toko_folder}",
             ", ".join(file_links),
             now,
@@ -395,12 +393,12 @@ def update_document(kode_toko):
             data.get("luas_sales", old_data.get("luas_sales")), # Update luas jika ada
             data.get("luas_parkir", old_data.get("luas_parkir")),
             data.get("luas_gudang", old_data.get("luas_gudang")),
-            # data.get("luas_bangunan_lantai_1", old_data.get("luas_bangunan_lantai_1")),
-            # data.get("luas_bangunan_lantai_2", old_data.get("luas_bangunan_lantai_2")),
-            # data.get("luas_bangunan_lantai_3", old_data.get("luas_bangunan_lantai_3")),
-            # data.get("total_luas_bangunan", old_data.get("total_luas_bangunan")),
-            # data.get("luas_area_terbuka", old_data.get("luas_area_terbuka")),
-            # data.get("tinggi_plafon", old_data.get("tinggi_plafon")),
+            data.get("luas_bangunan_lantai_1", old_data.get("luas_bangunan_lantai_1")),
+            data.get("luas_bangunan_lantai_2", old_data.get("luas_bangunan_lantai_2")),
+            data.get("luas_bangunan_lantai_3", old_data.get("luas_bangunan_lantai_3")),
+            data.get("total_luas_bangunan", old_data.get("total_luas_bangunan")),
+            data.get("luas_area_terbuka", old_data.get("luas_area_terbuka")),
+            data.get("tinggi_plafon", old_data.get("tinggi_plafon")),
             old_folder_link,
             ", ".join(new_file_links),
             update_timestamp,  # timestamp diupdate saat ada perubahan
