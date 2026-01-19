@@ -12,6 +12,7 @@ __pycache__/
 # Secret files
 /server/client_secret.json
 /server/token.json
+/server/service_account_doc.json
 client_secret.json
 token.json
 *.env

@@ -16,6 +16,18 @@ OPNAME_SHEET_ID = "1ssXGBJ-D4O8JVB1emOBuqcdmBKvdymciVsv7eMaBb64"
 DOC_SHEET_NAME = os.getenv("SHEET_NAME", "penyimpanan_dokumen")
 DOC_DRIVE_ROOT_ID = os.getenv("DRIVE_ROOT_ID", "14hjuP33ez1v1WDxkTi7A3k-XfKOZKVTc") # ID Folder Root Drive Penyimpanan
 
+# dokumentasi bangunan
+DOC_SHEET_ID = os.getenv("DOC_SHEET_ID")
+DOC_FOLDER_ID = os.getenv("DOC_FOLDER_ID")
+DOC_DEFAULT_PHOTO_ID = os.getenv("DOC_DEFAULT_PHOTO_ID")
+# Tambahkan ini:
+DOC_SERVICE_ACCOUNT_FILE = "service_account_doc.json"
+
+# Sheet Names untuk Dokumentasi (sesuaikan jika berbeda)
+DOC_SHEET_NAME_TEMP = "dokumentasi_temp"
+DOC_SHEET_NAME_FINAL = "dokumentasi_bangunan"
+DOC_SHEET_NAME_LOG = "login_dokumentasi"
+
 # Nama-nama sheet
 DATA_ENTRY_SHEET_NAME = "Form2"
 DATA_ENTRY_SHEET_NAME_RAB_2 = "Form2"

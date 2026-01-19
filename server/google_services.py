@@ -9,6 +9,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from google.oauth2 import service_account  # <--- TAMBAHAN PENTING
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 import base64
 from email.mime.multipart import MIMEMultipart
@@ -20,9 +21,11 @@ import config
 
 class GoogleServiceProvider:
     def __init__(self):
-        # --- 1. DEFINISI SCOPES BERBEDA ---
+        # ==========================================
+        # 1. SCOPES DEFINITION
+        # ==========================================
         
-        # Scopes untuk Sparta (Full Access: Sheet, Drive, Gmail, Calendar)
+        # A. Scopes SPARTA (Utama)
         self.sparta_scopes = [
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/gmail.send',
@@ -30,18 +33,26 @@ class GoogleServiceProvider:
             'https://www.googleapis.com/auth/calendar'
         ]
 
-        # Scopes untuk Dokumen (Limited Access: Sheet, Drive)
-        # HANYA gunakan scope yang ada di token_doc.json
+        # B. Scopes DOKUMEN (Existing - User punya)
         self.doc_scopes = [
             'https://www.googleapis.com/auth/drive.file',
             'https://www.googleapis.com/auth/spreadsheets'
         ]
-        
-        # --- 2. LOAD CREDENTIALS SPARTA (UTAMA) ---
-        # Load menggunakan sparta_scopes
+
+        # C. Scopes DOKUMENTASI (Baru - Service Account)
+        # Service Account butuh scope Drive penuh agar lancar handle folder orang lain
+        self.dokumentasi_scopes = [
+            'https://www.googleapis.com/auth/drive', 
+            'https://www.googleapis.com/auth/spreadsheets'
+        ]
+
+        # ==========================================
+        # 2. LOAD CREDENTIALS SPARTA (UTAMA)
+        # ==========================================
+        print("🔄 Memuat Credentials Sparta (Utama)...")
         self.sparta_creds = self._load_credentials('token.json', self.sparta_scopes)
         
-        # Inisialisasi Service Sparta
+        # Service Sparta
         self.gspread_client = gspread.authorize(self.sparta_creds)
         self.sheet = self.gspread_client.open_by_key(config.SPREADSHEET_ID)
         self.data_entry_sheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
@@ -49,24 +60,76 @@ class GoogleServiceProvider:
         self.drive_service = build('drive', 'v3', credentials=self.sparta_creds)
         self.gmail_service = build('gmail', 'v1', credentials=self.sparta_creds)
         self.calendar_service = build('calendar', 'v3', credentials=self.sparta_creds)
+        print("✅ Service Sparta Berhasil.")
 
-        # --- 3. LOAD CREDENTIALS PENYIMPANAN DOKUMEN (KEDUA) ---
+
+        # ==========================================
+        # 3. LOAD CREDENTIALS DOKUMEN (EXISTING)
+        # ==========================================
+        # (Bagian ini SAYA BIARKAN sesuai kode Anda, pakai token_doc.json)
+        print("🔄 Memuat Credentials Dokumen (Existing)...")
         try:
-            # Load menggunakan doc_scopes (PENTING: Agar tidak invalid_scope)
             self.doc_creds = self._load_credentials('token_doc.json', self.doc_scopes)
             
-            # Inisialisasi Service Dokumen
+            # Service Dokumen (Variabel pakai prefix 'doc_')
             self.doc_gspread_client = gspread.authorize(self.doc_creds)
             
             if getattr(config, 'SPREADSHEET_ID', None):
+                # Note: Ini sepertinya pakai ID sheet Sparta juga? Sesuaikan jika beda.
                 self.doc_sheet = self.doc_gspread_client.open_by_key(config.SPREADSHEET_ID)
             
             self.doc_drive_service = build('drive', 'v3', credentials=self.doc_creds)
-            print("✅ Token Dokumen berhasil dimuat.")
+            print("✅ Service Dokumen (Existing) Berhasil.")
         except Exception as e:
             print(f"⚠️ Warning: Token Dokumen gagal dimuat: {e}")
             self.doc_drive_service = None
             self.doc_sheet = None
+
+
+        # ==========================================
+        # 4. LOAD CREDENTIALS DOKUMENTASI (BARU)
+        # ==========================================
+        # (Ini yang pakai Service Account JSON untuk fitur migrasi)
+        print("🔄 Memuat Service Account Dokumentasi (Baru)...")
+        try:
+            # Menggunakan nama file dari config atau default
+            sa_filename = getattr(config, 'DOC_SERVICE_ACCOUNT_FILE', 'service_account_doc.json')
+            
+            # Logic Render Secret File
+            secret_path = os.path.join('/etc/secrets/', sa_filename)
+            
+            final_sa_path = None
+            if os.path.exists(secret_path):
+                final_sa_path = secret_path
+            elif os.path.exists(sa_filename):
+                final_sa_path = sa_filename
+
+            if final_sa_path:
+                # Load pakai Service Account
+                self.dokumentasi_creds = service_account.Credentials.from_service_account_file(
+                    final_sa_path, 
+                    scopes=self.dokumentasi_scopes
+                )
+                
+                # Inisialisasi Service (Variabel pakai prefix 'dokumentasi_')
+                self.dokumentasi_gspread = gspread.authorize(self.dokumentasi_creds)
+                self.dokumentasi_drive = build('drive', 'v3', credentials=self.dokumentasi_creds)
+                
+                # Buka Sheet Dokumentasi (ID Baru dari config)
+                doc_sheet_id = getattr(config, 'DOC_SHEET_ID', None)
+                if doc_sheet_id:
+                    self.dokumentasi_sheet = self.dokumentasi_gspread.open_by_key(doc_sheet_id)
+                    print("✅ Service Dokumentasi (Baru) Berhasil.")
+                else:
+                    print("⚠️ Warning: DOC_SHEET_ID belum ada di config.")
+                    self.dokumentasi_sheet = None
+            else:
+                raise FileNotFoundError("File JSON Service Account tidak ketemu.")
+
+        except Exception as e:
+            print(f"❌ Gagal memuat Dokumentasi Baru: {e}")
+            self.dokumentasi_drive = None
+            self.dokumentasi_sheet = None
 
     def _load_credentials(self, token_filename, scopes_list):
         """
@@ -2759,3 +2822,111 @@ class GoogleServiceProvider:
                 print(f"Error list_folder_files: {e}")
                 return []
         return []
+
+    # ... method yang sudah ada ...
+
+    # ==========================================
+    # HELPER METHODS KHUSUS DOKUMENTASI (MIGRASI)
+    # Menggunakan: self.dokumentasi_sheet & self.dokumentasi_drive
+    # ==========================================
+
+    def dokumentasi_read_sheet(self, sheet_name):
+        """Membaca sheet menggunakan Service Account Dokumentasi."""
+        try:
+            # Cek apakah service berhasil dimuat saat init
+            if not self.dokumentasi_sheet:
+                print("⚠️ Service Dokumentasi belum siap (Sheet None).")
+                return []
+            
+            # Langsung buka worksheet dari objek sheet yang sudah di-init
+            worksheet = self.dokumentasi_sheet.worksheet(sheet_name)
+            return worksheet.get_all_values()
+        except Exception as e:
+            print(f"❌ Error reading dokumentasi sheet {sheet_name}: {e}")
+            return []
+
+    def dokumentasi_append_row(self, sheet_name, row_values):
+        """Append row menggunakan Service Account Dokumentasi."""
+        try:
+            if not self.dokumentasi_sheet: return False
+            worksheet = self.dokumentasi_sheet.worksheet(sheet_name)
+            worksheet.append_row(row_values, value_input_option='USER_ENTERED')
+            return True
+        except Exception as e:
+            print(f"❌ Error appending dokumentasi: {e}")
+            return False
+
+    def dokumentasi_update_row(self, sheet_name, row_index, row_values):
+        """Update row menggunakan Service Account Dokumentasi."""
+        try:
+            if not self.dokumentasi_sheet: return False
+            worksheet = self.dokumentasi_sheet.worksheet(sheet_name)
+            
+            # Helper untuk mendapatkan huruf kolom (A, B, ... Z, AA, AB...)
+            col_count = len(row_values)
+            last_col_char = self._get_col_letter(col_count) # Pastikan method _get_col_letter ada/bisa diakses
+            
+            cell_range = f"A{row_index}:{last_col_char}{row_index}"
+            worksheet.update(cell_range, [row_values], value_input_option='USER_ENTERED')
+            return True
+        except Exception as e:
+            print(f"❌ Error updating dokumentasi: {e}")
+            return False
+
+    def dokumentasi_upload_image(self, base64_data, filename):
+        """Upload gambar ke Drive menggunakan Service Account."""
+        try:
+            if not self.dokumentasi_drive: 
+                print("⚠️ Service Drive Dokumentasi belum siap.")
+                return None
+
+            folder_id = config.DOC_FOLDER_ID
+            
+            # 1. Hapus file lama jika ada (Logic overwrite)
+            query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+            results = self.dokumentasi_drive.files().list(q=query, fields="files(id)").execute()
+            for f in results.get('files', []):
+                try:
+                    self.dokumentasi_drive.files().delete(fileId=f['id']).execute()
+                except: pass
+
+            # 2. Upload baru
+            clean_b64 = base64_data.split(",")[-1]
+            file_bytes = base64.b64decode(clean_b64)
+            
+            file_metadata = {'name': filename, 'parents': [folder_id]}
+            media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype='image/jpeg')
+            
+            file = self.dokumentasi_drive.files().create(
+                body=file_metadata, media_body=media, fields='id'
+            ).execute()
+            
+            return file.get('id')
+        except Exception as e:
+            print(f"❌ Error uploading doc image: {e}")
+            return None
+
+    def dokumentasi_get_file_stream(self, file_id):
+        """Stream file dari Drive Service Account."""
+        try:
+            if not self.dokumentasi_drive: return None
+            
+            request = self.dokumentasi_drive.files().get_media(fileId=file_id)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+            fh.seek(0)
+            return fh
+        except Exception as e:
+            print(f"❌ Error streaming file {file_id}: {e}")
+            return None
+
+    # Helper untuk konversi angka ke huruf kolom (jika belum ada di class Anda)
+    def _get_col_letter(self, col_num):
+        string = ""
+        while col_num > 0:
+            col_num, remainder = divmod(col_num - 1, 26)
+            string = chr(65 + remainder) + string
+        return string

@@ -22,6 +22,7 @@ from pengawasan_email_logic import get_email_details, FORM_LINKS
 from werkzeug.utils import secure_filename
 from document_api import doc_bp
 from data_api import data_bp
+from dokumentasi_api import dokumentasi_bp # <--- dokumentasi bangunan
 
 load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -59,6 +60,7 @@ google_provider = GoogleServiceProvider()
 
 app.register_blueprint(data_bp)
 app.register_blueprint(doc_bp)
+app.register_blueprint(dokumentasi_bp) # <--- dokumentasi bangunan
 app.json.sort_keys = False
 
 # --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---
