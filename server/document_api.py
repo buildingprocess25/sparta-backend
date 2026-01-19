@@ -385,7 +385,7 @@ def update_document(kode_toko):
 
         # Update Sheet
         # Hati-hati urutan kolom harus sama persis dengan sheet
-        cell_range = f"A{row_index}:J{row_index}"
+        cell_range = f"A{row_index}:P{row_index}"
         ws.update(cell_range, [[
             old_data.get("kode_toko"),
             old_data.get("nama_toko"),
