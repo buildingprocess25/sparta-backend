@@ -817,6 +817,152 @@ class GoogleServiceProvider:
             print(f"Error insert pengawasan to gantt chart: {e}")
             return {"success": False, "message": str(e)}
 
+    def remove_pengawasan_from_gantt_chart(self, nomor_ulok, lingkup_pekerjaan, remove_day):
+        """
+        Hapus data Pengawasan (angka hari) dari kolom Pengawasan_1 s/d Pengawasan_10.
+        Setelah dihapus, nilai-nilai di kolom berikutnya akan digeser ke kiri.
+        
+        Contoh: Jika Pengawasan_1=5, Pengawasan_2=10, Pengawasan_3=15 dan remove_day=5,
+        maka setelah dihapus: Pengawasan_1=10, Pengawasan_2=15, Pengawasan_3=""
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk mencari baris
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan untuk mencari baris
+        remove_day : int/str
+            Angka hari yang akan dihapus dari kolom Pengawasan
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            
+            if not all_values:
+                return {"success": False, "message": "Sheet kosong atau header tidak ditemukan"}
+            
+            headers = all_values[0]
+            data_rows = all_values[1:]
+            
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+            
+            # Normalisasi input
+            target_ulok = str(nomor_ulok).strip().upper()
+            target_lingkup = str(lingkup_pekerjaan).strip().lower()
+            remove_value = str(remove_day).strip()
+            
+            # Validasi input
+            if not target_ulok:
+                return {"success": False, "message": "Nomor Ulok tidak boleh kosong"}
+            
+            if not target_lingkup:
+                return {"success": False, "message": "Lingkup Pekerjaan tidak boleh kosong"}
+            
+            if not remove_value:
+                return {"success": False, "message": "Remove day tidak boleh kosong"}
+            
+            # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan di header"}
+            
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan di header"}
+            
+            # Cari kolom Pengawasan_1 sampai Pengawasan_10
+            pengawasan_columns = []
+            for i in range(1, 11):  # Pengawasan_1 sampai Pengawasan_10
+                col_name = f"Pengawasan_{i}"
+                if col_name in headers:
+                    pengawasan_columns.append({
+                        "name": col_name,
+                        "index": headers.index(col_name)
+                    })
+            
+            if not pengawasan_columns:
+                return {"success": False, "message": "Kolom Pengawasan_1 sampai Pengawasan_10 tidak ditemukan di header"}
+            
+            # Cari baris berdasarkan Nomor Ulok dan Lingkup_Pekerjaan
+            found_row_index = None
+            found_row_data = None
+            for idx, row in enumerate(data_rows):
+                if len(row) <= max(ulok_idx, lingkup_idx):
+                    continue
+                
+                current_ulok = str(row[ulok_idx]).strip().upper()
+                current_lingkup = str(row[lingkup_idx]).strip().lower()
+                
+                if current_ulok == target_ulok and current_lingkup == target_lingkup:
+                    found_row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+                    found_row_data = row
+                    break
+            
+            if not found_row_index:
+                return {
+                    "success": False, 
+                    "message": f"Data dengan Nomor Ulok '{target_ulok}' dan Lingkup '{target_lingkup}' tidak ditemukan"
+                }
+            
+            # Ambil semua nilai Pengawasan saat ini
+            current_pengawasan_values = []
+            for peng_col in pengawasan_columns:
+                col_idx = peng_col["index"]
+                cell_value = ""
+                if len(found_row_data) > col_idx:
+                    cell_value = str(found_row_data[col_idx]).strip()
+                current_pengawasan_values.append(cell_value)
+            
+            # Cari dan hapus nilai remove_day
+            found_value = False
+            for i, val in enumerate(current_pengawasan_values):
+                if val == remove_value:
+                    current_pengawasan_values.pop(i)
+                    found_value = True
+                    break
+            
+            if not found_value:
+                return {
+                    "success": False,
+                    "message": f"Nilai '{remove_value}' tidak ditemukan di kolom Pengawasan_1 sampai Pengawasan_10"
+                }
+            
+            # Geser nilai ke kiri dan tambahkan string kosong di akhir
+            current_pengawasan_values.append("")  # Tambah kosong di akhir untuk mengisi slot yang terhapus
+            
+            # Update semua kolom Pengawasan dengan nilai yang sudah digeser
+            updates = []
+            for i, peng_col in enumerate(pengawasan_columns):
+                col_idx_1based = peng_col["index"] + 1
+                cell_range = gspread.utils.rowcol_to_a1(found_row_index, col_idx_1based)
+                new_value = current_pengawasan_values[i] if i < len(current_pengawasan_values) else ""
+                updates.append({
+                    "range": cell_range,
+                    "values": [[new_value]]
+                })
+            
+            # Batch update untuk efisiensi
+            worksheet.batch_update(updates, value_input_option='USER_ENTERED')
+            
+            return {
+                "success": True,
+                "message": f"Data '{remove_value}' berhasil dihapus dan kolom Pengawasan sudah digeser",
+                "row_index": found_row_index,
+                "removed_value": remove_value,
+                "new_values": current_pengawasan_values[:len(pengawasan_columns)]
+            }
+            
+        except Exception as e:
+            print(f"Error remove pengawasan from gantt chart: {e}")
+            return {"success": False, "message": str(e)}
+
     def update_keterlambatan_day_gantt(self, nomor_ulok, lingkup_pekerjaan, kategori, h_awal, h_akhir, keterlambatan):
         """
         Insert atau Update kolom keterlambatan di sheet DAY_GANTT_CHART_SHEET_NAME.

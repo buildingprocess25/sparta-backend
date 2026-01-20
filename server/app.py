@@ -1611,15 +1611,30 @@ def insert_day_gantt_data():
 @app.route('/api/gantt/pengawasan/insert', methods=['POST'])
 def insert_pengawasan_to_gantt():
     """
-    Insert data Pengawasan (angka hari) ke kolom Pengawasan_1 s/d Pengawasan_10 secara berurutan.
-    Cari baris berdasarkan Nomor Ulok dan Lingkup_Pekerjaan, lalu insert ke kolom Pengawasan 
-    yang pertama masih kosong.
+    Insert atau Remove data Pengawasan (angka hari) ke/dari kolom Pengawasan_1 s/d Pengawasan_10.
     
-    Request body:
+    Mode Insert:
+    - Cari baris berdasarkan Nomor Ulok dan Lingkup_Pekerjaan
+    - Insert ke kolom Pengawasan yang pertama masih kosong
+    
+    Mode Remove:
+    - Jika ada field 'remove_day', hapus nilai tersebut dari kolom Pengawasan
+    - Setelah dihapus, nilai-nilai di kolom berikutnya akan digeser ke kiri
+    - Contoh: Pengawasan_1=5, Pengawasan_2=10, Pengawasan_3=15, remove_day=5
+              Hasil: Pengawasan_1=10, Pengawasan_2=15, Pengawasan_3=""
+    
+    Request body untuk Insert:
     {
         "nomor_ulok": "Z001-2512-TEST",
         "lingkup_pekerjaan": "SIPIL",
         "pengawasan_day": 5
+    }
+    
+    Request body untuk Remove:
+    {
+        "nomor_ulok": "Z001-2512-TEST",
+        "lingkup_pekerjaan": "SIPIL",
+        "remove_day": 5
     }
     """
     data = request.get_json()
@@ -1629,6 +1644,7 @@ def insert_pengawasan_to_gantt():
     nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
     lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
     pengawasan_day = data.get('pengawasan_day')
+    remove_day = data.get('remove_day')
     
     if not nomor_ulok:
         return jsonify({
@@ -1642,10 +1658,38 @@ def insert_pengawasan_to_gantt():
             "message": "Field 'lingkup_pekerjaan' wajib diisi"
         }), 400
     
+    # Mode Remove: jika ada remove_day
+    if remove_day is not None:
+        try:
+            result = google_provider.remove_pengawasan_from_gantt_chart(
+                nomor_ulok, 
+                lingkup_pekerjaan, 
+                remove_day
+            )
+            
+            if result["success"]:
+                return jsonify({
+                    "status": "success",
+                    "message": result["message"],
+                    "row_index": result.get("row_index"),
+                    "removed_value": result.get("removed_value"),
+                    "new_values": result.get("new_values")
+                }), 200
+            else:
+                return jsonify({
+                    "status": "error",
+                    "message": result["message"]
+                }), 400
+                
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"status": "error", "message": str(e)}), 500
+    
+    # Mode Insert: jika ada pengawasan_day
     if pengawasan_day is None:
         return jsonify({
             "status": "error",
-            "message": "Field 'pengawasan_day' wajib diisi"
+            "message": "Field 'pengawasan_day' atau 'remove_day' wajib diisi"
         }), 400
     
     try:
