@@ -1438,7 +1438,8 @@ def get_gantt_data():
             "rab": result['rab'],
             "filtered_categories": result['filtered_categories'],
             "gantt_data": result['gantt'],
-            "day_gantt_data": result['day_gantt']
+            "day_gantt_data": result['day_gantt'],
+            "dependency_data": result['dependency']
         }), 200
         
     except Exception as e:
@@ -1636,6 +1637,142 @@ def insert_day_gantt_data():
                 }), 400
             
             result = google_provider.insert_day_gantt_chart_single(nomor_ulok, lingkup_pekerjaan, kategori_data)
+        
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Format request tidak valid. Gunakan list atau object."
+            }), 400
+        
+        if result["success"]:
+            return jsonify({
+                "status": "success",
+                "message": result["message"],
+                "details": result.get("details", {})
+            }), 201
+        else:
+            return jsonify({
+                "status": "error",
+                "message": result["message"]
+            }), 400
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/gantt/dependency/insert', methods=['POST'])
+def insert_dependency_gantt_data():
+    """
+    Insert atau Remove data masif ke/dari sheet Dependency Gantt.
+    
+    Mode Insert - Request body bisa dalam 2 format:
+    
+    Format 1 - List langsung:
+    [
+        {
+            "Nomor Ulok": "asa-asa-sas",
+            "Lingkup_Pekerjaan": "ME",
+            "Kategori": "INSTALASI",
+            "Kategori_Terikat": "FIXTURE"
+        },
+        ...
+    ]
+    
+    Format 2 - Object dengan dependency_data:
+    {
+        "nomor_ulok": "asa-asa-sas",
+        "lingkup_pekerjaan": "ME",
+        "dependency_data": [
+            {"Kategori": "INSTALASI", "Kategori_Terikat": "FIXTURE"},
+            {"Kategori": "FIXTURE", "Kategori_Terikat": "PEKERJAAN TAMBAHAN"}
+        ]
+    }
+    
+    Mode Remove - Object dengan remove_dependency_data:
+    {
+        "nomor_ulok": "asa-asa-sas",
+        "lingkup_pekerjaan": "ME",
+        "remove_dependency_data": [
+            {"Kategori": "INSTALASI", "Kategori_Terikat": "FIXTURE"},
+            {"Kategori": "FIXTURE", "Kategori_Terikat": "PEKERJAAN TAMBAHAN"}
+        ]
+    }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "Request body kosong"}), 400
+    
+    try:
+        # Cek format request
+        if isinstance(data, list):
+            # Format 1: List langsung (Insert mode)
+            if len(data) == 0:
+                return jsonify({
+                    "status": "error",
+                    "message": "List data kosong"
+                }), 400
+            
+            result = google_provider.insert_dependency_gantt_data(data)
+        
+        elif isinstance(data, dict):
+            # Cek apakah mode Remove
+            remove_dependency_data = data.get('remove_dependency_data')
+            
+            if remove_dependency_data is not None:
+                # Mode Remove
+                nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
+                lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+                
+                if not nomor_ulok or not lingkup_pekerjaan:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi untuk mode remove"
+                    }), 400
+                
+                if not isinstance(remove_dependency_data, list) or len(remove_dependency_data) == 0:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Field 'remove_dependency_data' harus berupa list yang tidak kosong"
+                    }), 400
+                
+                result = google_provider.remove_dependency_gantt_data(
+                    nomor_ulok, 
+                    lingkup_pekerjaan, 
+                    remove_dependency_data
+                )
+                
+                if result["success"]:
+                    return jsonify({
+                        "status": "success",
+                        "message": result["message"],
+                        "deleted_count": result.get("deleted_count", 0),
+                        "deleted_items": result.get("deleted_items", [])
+                    }), 200
+                else:
+                    return jsonify({
+                        "status": "error",
+                        "message": result["message"]
+                    }), 400
+            
+            # Format 2: Object dengan dependency_data (Insert mode)
+            nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
+            lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            dependency_data = data.get('dependency_data')
+            
+            if not nomor_ulok or not lingkup_pekerjaan:
+                return jsonify({
+                    "status": "error",
+                    "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi"
+                }), 400
+            
+            if not dependency_data or not isinstance(dependency_data, list):
+                return jsonify({
+                    "status": "error",
+                    "message": "Field 'dependency_data' harus berupa list yang tidak kosong"
+                }), 400
+            
+            result = google_provider.insert_dependency_gantt_single(nomor_ulok, lingkup_pekerjaan, dependency_data)
         
         else:
             return jsonify({

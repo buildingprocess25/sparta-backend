@@ -507,16 +507,55 @@ class GoogleServiceProvider:
             except Exception as day_gantt_error:
                 print(f"Error getting day gantt chart data: {day_gantt_error}")
 
+            # --- AMBIL DATA DEPENDENCY GANTT (Jika ada) ---
+            dependency_data = []
+            try:
+                dependency_sheet = self.sheet.worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
+                all_dependency_values = dependency_sheet.get_all_values()
+                
+                if all_dependency_values:
+                    dependency_headers = all_dependency_values[0]
+                    dependency_data_rows = all_dependency_values[1:]
+                    
+                    # Cari index kolom Nomor Ulok dan Lingkup_Pekerjaan di sheet dependency
+                    try:
+                        dependency_ulok_idx = dependency_headers.index(config.COLUMN_NAMES.LOKASI)
+                        dependency_lingkup_idx = dependency_headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+                    except ValueError:
+                        print("Kolom Nomor Ulok atau Lingkup Pekerjaan tidak ditemukan di Dependency Gantt sheet")
+                        dependency_ulok_idx = -1
+                        dependency_lingkup_idx = -1
+                    
+                    if dependency_ulok_idx != -1 and dependency_lingkup_idx != -1:
+                        # Cari semua row yang cocok (satu ulok+lingkup bisa punya banyak dependency)
+                        for row_vals in dependency_data_rows:
+                            if len(row_vals) <= max(dependency_ulok_idx, dependency_lingkup_idx):
+                                continue
+                            
+                            current_ulok = str(row_vals[dependency_ulok_idx]).strip().upper()
+                            current_lingkup = str(row_vals[dependency_lingkup_idx]).strip()
+                            
+                            if current_ulok == target_ulok and current_lingkup.lower() == target_lingkup.lower():
+                                # Mapping ke dictionary
+                                if len(row_vals) < len(dependency_headers):
+                                    row_vals += [''] * (len(dependency_headers) - len(row_vals))
+                                dependency_data.append(dict(zip(dependency_headers, row_vals)))
+            except gspread.exceptions.WorksheetNotFound:
+                print(f"Worksheet '{config.DEPENDENCY_GANTT_SHEET_NAME}' tidak ditemukan")
+            except Exception as dependency_error:
+                print(f"Error getting dependency gantt data: {dependency_error}")
+
             return {
                 "rab": rab_data,
                 "filtered_categories": filtered_categories,
                 "gantt": gantt_data,
-                "day_gantt": day_gantt_data
+                "day_gantt": day_gantt_data,
+                "dependency": dependency_data
             }
 
         except Exception as e:
             print(f"Error getting Gantt data: {e}")
-            return {"rab": None, "filtered_categories": [], "gantt": None, "day_gantt": []}
+            return {"rab": None, "filtered_categories": [], "gantt": None, "day_gantt": [], "dependency": []}
 
     # get ulok by email pembuat (Buat kontraktor)
     def get_ulok_by_email(self, email):
@@ -1481,6 +1520,311 @@ class GoogleServiceProvider:
             print(f"Error remove day gantt chart data: {e}")
             return {"success": False, "message": str(e)}
         
+    def insert_dependency_gantt_data(self, data_list):
+        """
+        Insert atau Update data ke sheet DEPENDENCY_GANTT_SHEET_NAME.
+        Support massive insert seperti insert_day_gantt_chart_data.
+        
+        Data diidentifikasi berdasarkan kombinasi: Nomor Ulok + Lingkup_Pekerjaan + Kategori + Kategori_Terikat
+        
+        Parameters:
+        -----------
+        data_list : list of dict
+            List data dependency:
+            [
+                {
+                    "Nomor Ulok": "asa-asa-sas",
+                    "Lingkup_Pekerjaan": "ME",
+                    "Kategori": "INSTALASI",
+                    "Kategori_Terikat": "FIXTURE"
+                },
+                ...
+            ]
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            
+            if not all_values:
+                # Sheet kosong, buat header default
+                default_headers = [
+                    config.COLUMN_NAMES.LOKASI,
+                    config.COLUMN_NAMES.LINGKUP_PEKERJAAN,
+                    config.COLUMN_NAMES.KATEGORI,
+                    config.COLUMN_NAMES.KATEGORI_TERIKAT
+                ]
+                worksheet.append_row(default_headers, value_input_option='USER_ENTERED')
+                headers = default_headers
+                data_rows = []
+            else:
+                headers = all_values[0]
+                data_rows = all_values[1:]
+            
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+            
+            # Validasi data_list
+            if not data_list or not isinstance(data_list, list):
+                return {"success": False, "message": "data_list harus berupa list yang tidak kosong"}
+            
+            # Cari index kolom yang diperlukan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                ulok_idx = headers.index("Nomor Ulok") if "Nomor Ulok" in headers else None
+                if ulok_idx is None:
+                    return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan di header"}
+            
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                lingkup_idx = headers.index("Lingkup_Pekerjaan") if "Lingkup_Pekerjaan" in headers else None
+                if lingkup_idx is None:
+                    return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan di header"}
+            
+            try:
+                kategori_idx = headers.index(config.COLUMN_NAMES.KATEGORI)
+            except ValueError:
+                kategori_idx = headers.index("Kategori") if "Kategori" in headers else None
+                if kategori_idx is None:
+                    return {"success": False, "message": "Kolom Kategori tidak ditemukan di header"}
+            
+            try:
+                kategori_terikat_idx = headers.index(config.COLUMN_NAMES.KATEGORI_TERIKAT)
+            except ValueError:
+                kategori_terikat_idx = headers.index("Kategori_Terikat") if "Kategori_Terikat" in headers else None
+                if kategori_terikat_idx is None:
+                    return {"success": False, "message": "Kolom Kategori_Terikat tidak ditemukan di header"}
+            
+            # Buat dictionary map Key -> LIST of Row Indices
+            # Key: "ULOK|lingkup|kategori|kategori_terikat"
+            existing_data = {}
+            for idx, row in enumerate(data_rows):
+                if len(row) > max(ulok_idx, lingkup_idx, kategori_idx, kategori_terikat_idx):
+                    key = f"{str(row[ulok_idx]).strip().upper()}|{str(row[lingkup_idx]).strip().lower()}|{str(row[kategori_idx]).strip().lower()}|{str(row[kategori_terikat_idx]).strip().lower()}"
+                    
+                    if key not in existing_data:
+                        existing_data[key] = []
+                    existing_data[key].append(idx + 2)  # +2 (Header + 0-index)
+            
+            # Proses setiap item dalam data_list
+            inserts = []
+            skipped = 0
+            results = {
+                "inserted": 0,
+                "skipped": 0,
+                "errors": []
+            }
+            
+            for item in data_list:
+                item_ulok = str(item.get(config.COLUMN_NAMES.LOKASI, item.get("Nomor Ulok", ""))).strip().upper()
+                item_lingkup = str(item.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, item.get("Lingkup_Pekerjaan", ""))).strip().lower()
+                item_kategori = str(item.get(config.COLUMN_NAMES.KATEGORI, item.get("Kategori", ""))).strip().lower()
+                item_kategori_terikat = str(item.get(config.COLUMN_NAMES.KATEGORI_TERIKAT, item.get("Kategori_Terikat", ""))).strip().lower()
+                
+                if not item_ulok or not item_lingkup or not item_kategori or not item_kategori_terikat:
+                    results["errors"].append(f"Data tidak lengkap: {item}")
+                    continue
+                
+                lookup_key = f"{item_ulok}|{item_lingkup}|{item_kategori}|{item_kategori_terikat}"
+                
+                # Cek apakah sudah ada data dengan kombinasi yang sama
+                if lookup_key in existing_data and len(existing_data[lookup_key]) > 0:
+                    # Data sudah ada, skip (tidak perlu insert duplikat)
+                    results["skipped"] += 1
+                    continue
+                else:
+                    # INSERT: Data baru
+                    row_data = []
+                    for header in headers:
+                        if header == config.COLUMN_NAMES.LOKASI or header == "Nomor Ulok":
+                            row_data.append(item.get(config.COLUMN_NAMES.LOKASI, item.get("Nomor Ulok", "")))
+                        elif header == config.COLUMN_NAMES.LINGKUP_PEKERJAAN or header == "Lingkup_Pekerjaan":
+                            row_data.append(item.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, item.get("Lingkup_Pekerjaan", "")))
+                        elif header == config.COLUMN_NAMES.KATEGORI or header == "Kategori":
+                            row_data.append(item.get(config.COLUMN_NAMES.KATEGORI, item.get("Kategori", "")))
+                        elif header == config.COLUMN_NAMES.KATEGORI_TERIKAT or header == "Kategori_Terikat":
+                            row_data.append(item.get(config.COLUMN_NAMES.KATEGORI_TERIKAT, item.get("Kategori_Terikat", "")))
+                        else:
+                            row_data.append(item.get(header, ""))
+                    
+                    inserts.append(row_data)
+                    results["inserted"] += 1
+                    
+                    # Tambahkan ke existing_data agar tidak ada duplikat dalam batch yang sama
+                    existing_data[lookup_key] = [-1]  # Dummy value
+            
+            if inserts:
+                worksheet.append_rows(inserts, value_input_option='USER_ENTERED')
+            
+            return {
+                "success": True,
+                "message": f"Berhasil: {results['inserted']} insert baru, {results['skipped']} data sudah ada (skipped).",
+                "details": results
+            }
+            
+        except Exception as e:
+            print(f"Error insert dependency gantt data: {e}")
+            return {"success": False, "message": str(e)}
+
+    def remove_dependency_gantt_data(self, nomor_ulok, lingkup_pekerjaan, remove_dependency_data):
+        """
+        Remove baris-baris dari sheet Dependency Gantt berdasarkan Nomor Ulok, Lingkup_Pekerjaan,
+        dan list dependency yang akan dihapus.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk mencari baris
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan untuk mencari baris
+        remove_dependency_data : list of dict
+            List dependency yang akan dihapus:
+            [
+                {"Kategori": "INSTALASI", "Kategori_Terikat": "FIXTURE"},
+                {"Kategori": "FIXTURE", "Kategori_Terikat": "PEKERJAAN TAMBAHAN"}
+            ]
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            
+            if not all_values or len(all_values) < 2:
+                return {"success": False, "message": "Sheet kosong atau tidak ada data"}
+            
+            headers = all_values[0]
+            data_rows = all_values[1:]
+            
+            # Cari index kolom yang diperlukan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                ulok_idx = headers.index("Nomor Ulok") if "Nomor Ulok" in headers else None
+                if ulok_idx is None:
+                    return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan"}
+            
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                lingkup_idx = headers.index("Lingkup_Pekerjaan") if "Lingkup_Pekerjaan" in headers else None
+                if lingkup_idx is None:
+                    return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan"}
+            
+            try:
+                kategori_idx = headers.index(config.COLUMN_NAMES.KATEGORI)
+            except ValueError:
+                kategori_idx = headers.index("Kategori") if "Kategori" in headers else None
+                if kategori_idx is None:
+                    return {"success": False, "message": "Kolom Kategori tidak ditemukan"}
+            
+            try:
+                kategori_terikat_idx = headers.index(config.COLUMN_NAMES.KATEGORI_TERIKAT)
+            except ValueError:
+                kategori_terikat_idx = headers.index("Kategori_Terikat") if "Kategori_Terikat" in headers else None
+                if kategori_terikat_idx is None:
+                    return {"success": False, "message": "Kolom Kategori_Terikat tidak ditemukan"}
+            
+            target_ulok = str(nomor_ulok).strip().upper()
+            target_lingkup = str(lingkup_pekerjaan).strip().lower()
+            
+            # Buat set untuk lookup cepat
+            remove_set = set()
+            for item in remove_dependency_data:
+                kategori = str(item.get(config.COLUMN_NAMES.KATEGORI, item.get("Kategori", ""))).strip().lower()
+                kategori_terikat = str(item.get(config.COLUMN_NAMES.KATEGORI_TERIKAT, item.get("Kategori_Terikat", ""))).strip().lower()
+                if kategori and kategori_terikat:
+                    remove_set.add(f"{kategori}|{kategori_terikat}")
+            
+            if not remove_set:
+                return {"success": False, "message": "Tidak ada data valid untuk dihapus"}
+            
+            # Cari baris yang akan dihapus (dari bawah ke atas untuk menghindari index shift)
+            rows_to_delete = []
+            deleted_items = []
+            
+            for idx, row in enumerate(data_rows):
+                if len(row) <= max(ulok_idx, lingkup_idx, kategori_idx, kategori_terikat_idx):
+                    continue
+                
+                row_ulok = str(row[ulok_idx]).strip().upper()
+                row_lingkup = str(row[lingkup_idx]).strip().lower()
+                row_kategori = str(row[kategori_idx]).strip().lower()
+                row_kategori_terikat = str(row[kategori_terikat_idx]).strip().lower()
+                
+                if row_ulok == target_ulok and row_lingkup == target_lingkup:
+                    lookup_key = f"{row_kategori}|{row_kategori_terikat}"
+                    if lookup_key in remove_set:
+                        rows_to_delete.append(idx + 2)  # +2 (Header + 0-index)
+                        deleted_items.append({
+                            "Kategori": row_kategori,
+                            "Kategori_Terikat": row_kategori_terikat
+                        })
+            
+            if not rows_to_delete:
+                return {
+                    "success": True,
+                    "message": "Tidak ada data yang cocok untuk dihapus",
+                    "deleted_count": 0,
+                    "deleted_items": []
+                }
+            
+            # Hapus dari bawah ke atas
+            rows_to_delete.sort(reverse=True)
+            for row_idx in rows_to_delete:
+                worksheet.delete_rows(row_idx)
+            
+            return {
+                "success": True,
+                "message": f"Berhasil menghapus {len(rows_to_delete)} baris",
+                "deleted_count": len(rows_to_delete),
+                "deleted_items": deleted_items
+            }
+            
+        except Exception as e:
+            print(f"Error remove dependency gantt data: {e}")
+            return {"success": False, "message": str(e)}
+
+    def insert_dependency_gantt_single(self, nomor_ulok, lingkup_pekerjaan, dependency_data):
+        """
+        Insert data dependency untuk satu Nomor Ulok dengan multiple dependency.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok (contoh: "asa-asa-sas")
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan (contoh: "ME" atau "SIPIL")
+        dependency_data : list of dict
+            List dependency:
+            [
+                {"Kategori": "INSTALASI", "Kategori_Terikat": "FIXTURE"},
+                {"Kategori": "FIXTURE", "Kategori_Terikat": "PEKERJAAN TAMBAHAN"}
+            ]
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        # Konversi ke format data_list
+        data_list = []
+        for item in dependency_data:
+            data_list.append({
+                config.COLUMN_NAMES.LOKASI: nomor_ulok,
+                config.COLUMN_NAMES.LINGKUP_PEKERJAAN: lingkup_pekerjaan,
+                config.COLUMN_NAMES.KATEGORI: item.get(config.COLUMN_NAMES.KATEGORI, item.get("Kategori", "")),
+                config.COLUMN_NAMES.KATEGORI_TERIKAT: item.get(config.COLUMN_NAMES.KATEGORI_TERIKAT, item.get("Kategori_Terikat", ""))
+            })
+        
+        return self.insert_dependency_gantt_data(data_list)
+
     def insert_day_gantt_chart_single(self, nomor_ulok, lingkup_pekerjaan, kategori_data):
         """
         Insert atau Update data untuk satu Nomor Ulok dengan multiple kategori.

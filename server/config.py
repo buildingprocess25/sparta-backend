@@ -44,6 +44,7 @@ INPUT_PIC_SHEET_NAME = "InputPIC"
 PENUGASAN_SHEET_NAME = "Penugasan"
 GANTT_CHART_SHEET_NAME = "gantt_chart"
 DAY_GANTT_CHART_SHEET_NAME = "day_gantt_chart"
+DEPENDENCY_GANTT_SHEET_NAME = "dependency_gantt"
 
 SUMMARY_OPNAME_SHEET_NAME = "summary_opname"
 OPNAME_SHEET_NAME = "opname_final"
@@ -86,6 +87,8 @@ class COLUMN_NAMES:
     HARI_AWAL = "h_awal"
     HARI_AKHIR = "h_akhir"
     DURASI_SPK = "Durasi"
+    KATEGORI = "Kategori"
+    KATEGORI_TERIKAT = "Kategori_Terikat"
 
 
 # --- Jabatan & Status ---
