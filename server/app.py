@@ -1522,9 +1522,9 @@ def insert_gantt_data():
 @app.route('/api/gantt/day/insert', methods=['POST'])
 def insert_day_gantt_data():
     """
-    Insert data masif ke sheet Day Gantt Chart.
+    Insert atau Remove data masif ke/dari sheet Day Gantt Chart.
     
-    Request body bisa dalam 2 format:
+    Mode Insert - Request body bisa dalam 2 format:
     
     Format 1 - List langsung:
     [
@@ -1548,6 +1548,19 @@ def insert_day_gantt_data():
             {"Kategori": "Bobokan", "h_awal": "28/12/2025", "h_akhir": "30/12/2025"}
         ]
     }
+    
+    Mode Remove - Object dengan remove_kategori_data:
+    {
+        "nomor_ulok": "asa-asa-sas",
+        "lingkup_pekerjaan": "ME",
+        "remove_kategori_data": [
+            {"Kategori": "Persiapan", "h_awal": "19/12/2025", "h_akhir": "21/12/2025"},
+            {"Kategori": "Pembersihan", "h_awal": "23/12/2025", "h_akhir": "25/12/2025"}
+        ]
+    }
+    
+    Note: Jika h_awal dan h_akhir tidak diisi pada remove, akan menghapus semua baris
+    dengan kategori tersebut untuk nomor_ulok dan lingkup_pekerjaan yang sama.
     """
     data = request.get_json()
     if not data:
@@ -1556,7 +1569,7 @@ def insert_day_gantt_data():
     try:
         # Cek format request
         if isinstance(data, list):
-            # Format 1: List langsung
+            # Format 1: List langsung (Insert mode)
             if len(data) == 0:
                 return jsonify({
                     "status": "error",
@@ -1566,7 +1579,46 @@ def insert_day_gantt_data():
             result = google_provider.insert_day_gantt_chart_data(data)
         
         elif isinstance(data, dict):
-            # Format 2: Object dengan kategori_data
+            # Cek apakah mode Remove
+            remove_kategori_data = data.get('remove_kategori_data')
+            
+            if remove_kategori_data is not None:
+                # Mode Remove
+                nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
+                lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+                
+                if not nomor_ulok or not lingkup_pekerjaan:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi untuk mode remove"
+                    }), 400
+                
+                if not isinstance(remove_kategori_data, list) or len(remove_kategori_data) == 0:
+                    return jsonify({
+                        "status": "error",
+                        "message": "Field 'remove_kategori_data' harus berupa list yang tidak kosong"
+                    }), 400
+                
+                result = google_provider.remove_day_gantt_chart_data(
+                    nomor_ulok, 
+                    lingkup_pekerjaan, 
+                    remove_kategori_data
+                )
+                
+                if result["success"]:
+                    return jsonify({
+                        "status": "success",
+                        "message": result["message"],
+                        "deleted_count": result.get("deleted_count", 0),
+                        "deleted_items": result.get("deleted_items", [])
+                    }), 200
+                else:
+                    return jsonify({
+                        "status": "error",
+                        "message": result["message"]
+                    }), 400
+            
+            # Format 2: Object dengan kategori_data (Insert mode)
             nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
             lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
             kategori_data = data.get('kategori_data')

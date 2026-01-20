@@ -1312,6 +1312,174 @@ class GoogleServiceProvider:
         except Exception as e:
             print(f"Error insert/update day gantt chart data: {e}")
             return {"success": False, "message": str(e)}
+
+    def remove_day_gantt_chart_data(self, nomor_ulok, lingkup_pekerjaan, remove_kategori_data):
+        """
+        Remove baris-baris dari sheet Day Gantt Chart berdasarkan Nomor Ulok, Lingkup_Pekerjaan,
+        dan list kategori yang akan dihapus.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk mencari baris
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan untuk mencari baris
+        remove_kategori_data : list of dict
+            List kategori yang akan dihapus dengan h_awal dan h_akhir:
+            [
+                {"Kategori": "Persiapan", "h_awal": "19/12/2025", "h_akhir": "21/12/2025"},
+                {"Kategori": "Pembersihan", "h_awal": "23/12/2025", "h_akhir": "25/12/2025"}
+            ]
+        
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            
+            if not all_values:
+                return {"success": False, "message": "Sheet kosong atau header tidak ditemukan"}
+            
+            headers = all_values[0]
+            data_rows = all_values[1:]
+            
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+            
+            # Normalisasi input
+            target_ulok = str(nomor_ulok).strip().upper()
+            target_lingkup = str(lingkup_pekerjaan).strip().lower()
+            
+            # Validasi input
+            if not target_ulok:
+                return {"success": False, "message": "Nomor Ulok tidak boleh kosong"}
+            
+            if not target_lingkup:
+                return {"success": False, "message": "Lingkup Pekerjaan tidak boleh kosong"}
+            
+            if not remove_kategori_data or not isinstance(remove_kategori_data, list):
+                return {"success": False, "message": "remove_kategori_data harus berupa list yang tidak kosong"}
+            
+            # Cari index kolom yang diperlukan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                ulok_idx = headers.index("Nomor Ulok") if "Nomor Ulok" in headers else None
+                if ulok_idx is None:
+                    return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan di header"}
+            
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                lingkup_idx = headers.index("Lingkup_Pekerjaan") if "Lingkup_Pekerjaan" in headers else None
+                if lingkup_idx is None:
+                    return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan di header"}
+            
+            try:
+                kategori_idx = headers.index("Kategori")
+            except ValueError:
+                return {"success": False, "message": "Kolom Kategori tidak ditemukan di header"}
+            
+            try:
+                h_awal_idx = headers.index(config.COLUMN_NAMES.HARI_AWAL)
+            except ValueError:
+                h_awal_idx = headers.index("h_awal") if "h_awal" in headers else None
+                if h_awal_idx is None:
+                    return {"success": False, "message": "Kolom h_awal tidak ditemukan di header"}
+            
+            try:
+                h_akhir_idx = headers.index(config.COLUMN_NAMES.HARI_AKHIR)
+            except ValueError:
+                h_akhir_idx = headers.index("h_akhir") if "h_akhir" in headers else None
+                if h_akhir_idx is None:
+                    return {"success": False, "message": "Kolom h_akhir tidak ditemukan di header"}
+            
+            # Buat set lookup untuk data yang akan dihapus
+            # Key: "KATEGORI|H_AWAL|H_AKHIR" (semua lowercase/normalized)
+            remove_lookup = set()
+            for item in remove_kategori_data:
+                item_kategori = str(item.get("Kategori", "")).strip().lower()
+                item_h_awal = str(item.get("h_awal", "")).strip()
+                item_h_akhir = str(item.get("h_akhir", "")).strip()
+                
+                if item_kategori:
+                    # Key bisa dengan atau tanpa h_awal/h_akhir
+                    if item_h_awal and item_h_akhir:
+                        remove_lookup.add(f"{item_kategori}|{item_h_awal}|{item_h_akhir}")
+                    else:
+                        # Jika tidak ada h_awal/h_akhir, hapus semua baris dengan kategori tersebut
+                        remove_lookup.add(f"{item_kategori}||")
+            
+            if not remove_lookup:
+                return {"success": False, "message": "Tidak ada kategori valid untuk dihapus"}
+            
+            # Cari baris yang akan dihapus (dari bawah ke atas untuk menghindari index shifting)
+            rows_to_delete = []
+            for idx, row in enumerate(data_rows):
+                if len(row) <= max(ulok_idx, lingkup_idx, kategori_idx, h_awal_idx, h_akhir_idx):
+                    continue
+                
+                current_ulok = str(row[ulok_idx]).strip().upper()
+                current_lingkup = str(row[lingkup_idx]).strip().lower()
+                current_kategori = str(row[kategori_idx]).strip().lower()
+                current_h_awal = str(row[h_awal_idx]).strip()
+                current_h_akhir = str(row[h_akhir_idx]).strip()
+                
+                # Cek apakah baris ini cocok dengan nomor_ulok dan lingkup_pekerjaan
+                if current_ulok != target_ulok or current_lingkup != target_lingkup:
+                    continue
+                
+                # Cek apakah kategori ada di remove_lookup
+                # 1. Cek dengan h_awal dan h_akhir spesifik
+                specific_key = f"{current_kategori}|{current_h_awal}|{current_h_akhir}"
+                # 2. Cek tanpa h_awal/h_akhir (hapus semua dengan kategori tersebut)
+                general_key = f"{current_kategori}||"
+                
+                if specific_key in remove_lookup or general_key in remove_lookup:
+                    row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+                    rows_to_delete.append({
+                        "row_index": row_index,
+                        "kategori": current_kategori,
+                        "h_awal": current_h_awal,
+                        "h_akhir": current_h_akhir
+                    })
+            
+            if not rows_to_delete:
+                return {
+                    "success": False,
+                    "message": f"Tidak ada data yang cocok untuk dihapus dengan Nomor Ulok '{target_ulok}' dan Lingkup '{target_lingkup}'"
+                }
+            
+            # Sort dari index terbesar ke terkecil untuk menghindari index shifting
+            rows_to_delete.sort(key=lambda x: x["row_index"], reverse=True)
+            
+            # Hapus baris satu per satu dari bawah ke atas
+            deleted_count = 0
+            deleted_items = []
+            for item in rows_to_delete:
+                try:
+                    worksheet.delete_rows(item["row_index"])
+                    deleted_count += 1
+                    deleted_items.append({
+                        "kategori": item["kategori"],
+                        "h_awal": item["h_awal"],
+                        "h_akhir": item["h_akhir"]
+                    })
+                except Exception as e:
+                    print(f"Warning: Gagal hapus baris {item['row_index']}: {e}")
+            
+            return {
+                "success": True,
+                "message": f"Berhasil menghapus {deleted_count} baris data",
+                "deleted_count": deleted_count,
+                "deleted_items": deleted_items
+            }
+            
+        except Exception as e:
+            print(f"Error remove day gantt chart data: {e}")
+            return {"success": False, "message": str(e)}
         
     def insert_day_gantt_chart_single(self, nomor_ulok, lingkup_pekerjaan, kategori_data):
         """
