@@ -89,6 +89,7 @@ class COLUMN_NAMES:
     DURASI_SPK = "Durasi"
     KATEGORI = "Kategori"
     KATEGORI_TERIKAT = "Kategori_Terikat"
+    DURASI_PEKERJAAN = "Durasi_Pekerjaan"
 
 
 # --- Jabatan & Status ---

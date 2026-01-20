@@ -367,7 +367,8 @@ class GoogleServiceProvider:
                 config.COLUMN_NAMES.ALAMAT,
                 config.COLUMN_NAMES.CABANG,
                 config.COLUMN_NAMES.LINGKUP_PEKERJAAN,
-                config.COLUMN_NAMES.NAMA_TOKO
+                config.COLUMN_NAMES.NAMA_TOKO,
+                config.COLUMN_NAMES.DURASI_PEKERJAAN
             ]
             
             if all_rab_values:
