@@ -957,7 +957,7 @@ def handle_rab_approval():
                         f"<p><b>Alasan Penolakan:</b></p>"
                         f"<p><i>{reason}</i></p>"
                         f"<p>Silakan ajukan revisi RAB Anda melalui link berikut:</p>"
-                        f"<p><a href='https://building-alfamart.vercel.app/login_rab.html' target='_blank' rel='noopener noreferrer'>Input Ulang RAB</a></p>")
+                        f"<p><a href='https://sparta-alfamart.vercel.app' target='_blank' rel='noopener noreferrer'>Input Ulang RAB</a></p>")
                 google_provider.send_email(to=creator_email, subject=subject, html_body=body)
             return render_template('response_page.html', title='Permintaan Ditolak', message='Status permintaan telah diperbarui.', logo_url=logo_url)
 
@@ -1184,7 +1184,7 @@ def handle_rab_2_approval():
                     # 7. Kirim Email
                     google_provider.send_email(
                         manager_email, 
-                        f"[TAHAP 2: PERLU PERSETUJUAN] IL Proyek {nama_toko} - {lingkup_pekerjaan}", 
+                        f"[TAHAP 2: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}", 
                         email_html_manager, 
                         attachments=final_attachments
                     )
@@ -1261,17 +1261,17 @@ def handle_rab_2_approval():
                         print("System: File manual berhasil dilampirkan di email final.")
                 # ---------------------------------------------------------------
 
-                subject = f"[FINAL - DISETUJUI] Pengajuan IL Proyek {nama_toko} - {lingkup_pekerjaan}"
+                subject = f"[FINAL - DISETUJUI] Pengajuan Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}"
 
                 # 9. Buat Body Email Dasar
                 base_body = (
-                    f"<p>Pengajuan IL untuk proyek <b>{nama_toko}</b> di cabang <b>{cabang}</b> "
+                    f"<p>Pengajuan Instruksi Lapangan untuk proyek <b>{nama_toko}</b> di cabang <b>{cabang}</b> "
                     f"telah disetujui sepenuhnya.</p>"
-                    f"<p>Tiga versi file PDF IL telah dilampirkan (Final):</p>"
+                    f"<p>Tiga versi file PDF Instruksi Lapangan telah dilampirkan (Final):</p>"
                     f"<ul>"
                     f"<li><b>{pdf_nonsbo_filename}</b>: Hanya berisi item pekerjaan di luar SBO.</li>"
                     f"<li><b>{pdf_recap_filename}</b>: Rekapitulasi Total Biaya.</li>"
-                    f"<li><b>{m_name}</b>: Rekapitulasi Lampiran Tambahan / IL.</li>"
+                    f"<li><b>{m_name}</b>: Rekapitulasi Lampiran Tambahan / Instruksi Lapangan.</li>"
                     
                     f"</ul>"
                     f"<p>Link Google Drive:</p>"
@@ -1281,7 +1281,7 @@ def handle_rab_2_approval():
                 )
                 
                 if link_pdf_manual:
-                     base_body += f"<li><a href='{link_pdf_manual}'>Link Lampiran Tambahan / IL</a></li>"
+                     base_body += f"<li><a href='{link_pdf_manual}'>Link Lampiran Tambahan / Instruksi Lapangan</a></li>"
                 
                 base_body += "</ul>"
 
@@ -1292,7 +1292,7 @@ def handle_rab_2_approval():
                         f"<hr>"
                         f"<p><b>TINDAKAN DIPERLUKAN:</b></p>"
                         f"<p>Silakan Opname pekerjaan instruksi lapangan melalui link berikut:</p>"
-                        f"<p><a href='https://opnamebnm.vercel.app/' "
+                        f"<p><a href='https://sparta-alfamart.vercel.app' "
                         f"target='_blank' style='background-color:#28a745; color:white; padding:10px 15px; text-decoration:none; border-radius:5px;'>INPUT OPNAME IL</a></p>"
                     )
                     google_provider.send_email(
@@ -1346,16 +1346,16 @@ def handle_rab_2_approval():
            
             
             if creator_email:
-                subject = f"[DITOLAK] Pengajuan IL Proyek {nama_toko} - {lingkup_pekerjaan}"
+                subject = f"[DITOLAK] Pengajuan Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}"
                 penolak = "Koordinator" if level == 'coordinator' else "Branch Manager"
                 
                 body = (
                     f"<p>Yth. Bapak/Ibu,</p>"
-                    f"<p>Pengajuan IL untuk proyek <b>{nama_toko}</b> dengan lingkup pekerjaan <b>{lingkup_pekerjaan}</b> telah <b>DITOLAK</b> oleh {penolak} ({approver}).</p>"
+                    f"<p>Pengajuan Instruksi Lapangan untuk proyek <b>{nama_toko}</b> dengan lingkup pekerjaan <b>{lingkup_pekerjaan}</b> telah <b>DITOLAK</b> oleh {penolak} ({approver}).</p>"
                     f"<p><b>Alasan Penolakan:</b></p>"
                     f"<blockquote style='background-color:#ffebeb; border-left:5px solid #dc3545; padding:10px;'><i>{reason}</i></blockquote>"
                     f"<p>Silakan perbaiki dan ajukan revisi melalui sistem.</p>"
-                    f"<p>https://instruksi-lapangan.vercel.app/</p>"
+                    f"<p>https://sparta-alfamart.vercel.app</p>"
                     f"<p>Terima kasih.</p>"
                 )
                 
@@ -1410,7 +1410,7 @@ def get_kontraktor():
 @app.route('/api/get_all_ulok_rab', methods=['GET'])
 def get_all_rab_ulok_data_list():
     try:
-        # Mengembalikan list of objects langsung
+        # Mengembalikan list of objects langsung form 3
         ulok_list = google_provider.get_all_rab_ulok()
         return jsonify(ulok_list), 200
     except Exception as e:
@@ -2373,7 +2373,7 @@ def handle_spk_approval():
             opname_recipients.update(kontraktor_list)
             
             if opname_recipients:
-                link_opname = f"<p>Silakan melakukan Opname melalui link berikut: <a href='https://opnamebnm.vercel.app/' target='_blank' rel='noopener noreferrer'>Pengisian Opname</a></p>"
+                link_opname = f"<p>Silakan melakukan Opname melalui link berikut: <a href='https://sparta-alfamart.vercel.app' target='_blank' rel='noopener noreferrer'>Pengisian Opname</a></p>"
                 body_opname = (f"<p>SPK untuk Toko <b>{nama_toko}</b> pada proyek <b>{jenis_toko} - {lingkup_pekerjaan}</b> ({row_data.get('Nomor Ulok')}) telah disetujui.</p>"
                                f"{link_opname}"
                                f"<p>File PDF final terlampir.</p>")
@@ -2406,7 +2406,7 @@ def handle_spk_approval():
                         f"<p><b>Alasan Penolakan:</b></p>"
                         f"<p><i>{reason}</i></p>"
                         f"<p>Silakan ajukan revisi SPK Anda melalui link berikut:</p>"
-                        f"<p><a href='https://building-alfamart.vercel.app/login_spk.html' target='_blank' rel='noopener noreferrer'>Input Ulang SPK</a></p>")
+                        f"<p><a href='https://sparta-alfamart.vercel.app' target='_blank' rel='noopener noreferrer'>Input Ulang SPK</a></p>")
                 google_provider.send_email(to=initiator_email, subject=subject, html_body=body)
 
             return render_template('response_page.html', title='Permintaan Ditolak', message='Status permintaan telah diperbarui menjadi ditolak.', logo_url=logo_url)
