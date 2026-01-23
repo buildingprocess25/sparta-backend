@@ -597,6 +597,15 @@ def submit_rab_kedua():
                 )
             }), 409
 
+        # 1. Ambil Email Pembuat
+        email_pembuat = data.get('Email_Pembuat')
+        
+        # 2. Cari Nama PT berdasarkan Email
+        nama_pt_kontraktor = get_pt_name_by_email(google_provider, email_pembuat)
+        
+        # 3. Masukkan ke dalam dictionary 'data' agar tersimpan di Form2 & muncul di PDF
+        data[config.COLUMN_NAMES.NAMA_PT] = nama_pt_kontraktor
+
         # Set status awal & timestamp
         WIB = timezone(timedelta(hours=7))
         data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_COORDINATOR
@@ -802,7 +811,7 @@ def submit_rab_kedua():
 
         google_provider.send_email(
             to=coordinator_emails,
-            subject=f"[TAHAP 1: PERLU PERSETUJUAN] IL Proyek {nama_toko} - {lingkup_pekerjaan}",
+            subject=f"[TAHAP 1: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}",
             html_body=email_html,
             attachments=attachments_list
         )
