@@ -90,6 +90,7 @@ class COLUMN_NAMES:
     KATEGORI = "Kategori"
     KATEGORI_TERIKAT = "Kategori_Terikat"
     DURASI_PEKERJAAN = "Durasi_Pekerjaan"
+    KATEGORI_LOKASI = "Kategori_Lokasi"
 
 
 # --- Jabatan & Status ---
