@@ -3604,7 +3604,7 @@ class GoogleServiceProvider:
             
         Returns:
         --------
-        dict: Data RAB jika ditemukan, None jika tidak ditemukan
+        tuple: (row_data dict, row_index) jika ditemukan, (None, None) jika tidak ditemukan
         """
         try:
             target_ulok = self._normalize_ulok(nomor_ulok)
@@ -3615,7 +3615,7 @@ class GoogleServiceProvider:
             
             if not all_values:
                 print("Sheet DATA_ENTRY kosong")
-                return None
+                return None, None
             
             headers = all_values[0]
             data_rows = all_values[1:]
@@ -3626,10 +3626,10 @@ class GoogleServiceProvider:
                 lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
             except ValueError:
                 print("Kolom Nomor Ulok atau Lingkup_Pekerjaan tidak ditemukan di header")
-                return None
+                return None, None
             
             # Cari data yang cocok (dari bawah ke atas untuk mendapatkan data terbaru)
-            for row_vals in reversed(data_rows):
+            for idx, row_vals in enumerate(reversed(data_rows)):
                 if len(row_vals) <= max(ulok_idx, lingkup_idx):
                     continue
                 
@@ -3637,15 +3637,18 @@ class GoogleServiceProvider:
                 current_lingkup = self._normalize_lingkup(row_vals[lingkup_idx])
                 
                 if current_ulok == target_ulok and current_lingkup == target_lingkup:
+                    # Hitung row_index (1-based, +1 untuk header, ambil dari reversed)
+                    actual_row_index = len(data_rows) - idx + 1  # +1 untuk header
+                    
                     # Mapping ke dictionary
                     if len(row_vals) < len(headers):
                         row_vals = list(row_vals) + [''] * (len(headers) - len(row_vals))
                     
-                    return dict(zip(headers, row_vals))
+                    return dict(zip(headers, row_vals)), actual_row_index
             
             print(f"Data RAB tidak ditemukan untuk Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}")
-            return None
+            return None, None
             
         except Exception as e:
             print(f"Error get_rab_data_by_ulok_and_lingkup: {e}")
-            return None
+            return None, None

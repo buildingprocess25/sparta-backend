@@ -1521,7 +1521,7 @@ def insert_gantt_data():
             if status_request.lower() == "terkunci":
                 try:
                     # Ambil data RAB dari DATA_ENTRY_SHEET_NAME berdasarkan nomor_ulok dan lingkup
-                    rab_data = google_provider.get_rab_data_by_ulok_and_lingkup(nomor_ulok, lingkup)
+                    rab_data, rab_row_index = google_provider.get_rab_data_by_ulok_and_lingkup(nomor_ulok, lingkup)
                     
                     if not rab_data:
                         print(f"⚠️ Data RAB tidak ditemukan untuk Ulok: {nomor_ulok}, Lingkup: {lingkup}")
@@ -1553,43 +1553,60 @@ def insert_gantt_data():
                                 link_pdf_rekap = rab_data.get(config.COLUMN_NAMES.LINK_PDF_REKAP, '')
                                 
                                 # Siapkan attachment - download file dari Drive
+                                # download_file_from_link returns (filename, bytes, mimetype)
                                 attachments = []
                                 
                                 if link_pdf_nonsbo:
                                     try:
-                                        pdf_nonsbo_bytes = google_provider.download_file_from_link(link_pdf_nonsbo)
-                                        if pdf_nonsbo_bytes:
+                                        downloaded = google_provider.download_file_from_link(link_pdf_nonsbo)
+                                        if downloaded and downloaded[1]:  # (filename, bytes, mimetype)
+                                            orig_filename, file_bytes, mime_type = downloaded
                                             pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{nomor_ulok_display}.pdf"
-                                            attachments.append((pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'))
+                                            attachments.append((pdf_nonsbo_filename, file_bytes, 'application/pdf'))
                                     except Exception as e:
                                         print(f"⚠️ Gagal download PDF Non-SBO: {e}")
                                 
                                 if link_pdf_rekap:
                                     try:
-                                        pdf_recap_bytes = google_provider.download_file_from_link(link_pdf_rekap)
-                                        if pdf_recap_bytes:
+                                        downloaded = google_provider.download_file_from_link(link_pdf_rekap)
+                                        if downloaded and downloaded[1]:  # (filename, bytes, mimetype)
+                                            orig_filename, file_bytes, mime_type = downloaded
                                             pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{nomor_ulok_display}.pdf"
-                                            attachments.append((pdf_recap_filename, pdf_recap_bytes, 'application/pdf'))
+                                            attachments.append((pdf_recap_filename, file_bytes, 'application/pdf'))
                                     except Exception as e:
                                         print(f"⚠️ Gagal download PDF Rekap: {e}")
                                 
                                 # Tambahkan Status Terkunci ke rab_data untuk ditampilkan di template
                                 rab_data[config.COLUMN_NAMES.STATUS] = "Terkunci"
                                 
+                                # Buat approval_url dan rejection_url sama seperti submit_rab()
+                                base_url = "https://sparta-backend-5hdj.onrender.com"
+                                approver_for_link = coordinator_emails[0]
+                                approval_url = (
+                                    f"{base_url}/api/handle_rab_approval"
+                                    f"?action=approve&row={rab_row_index}"
+                                    f"&level=coordinator&approver={approver_for_link}"
+                                )
+                                rejection_url = (
+                                    f"{base_url}/api/reject_form/rab"
+                                    f"?row={rab_row_index}&level=coordinator"
+                                    f"&approver={approver_for_link}"
+                                )
+                                
                                 # Render email template sama seperti submit_rab()
                                 email_html = render_template(
                                     'email_template.html',
-                                    doc_type="GANTT CHART",
+                                    doc_type="RAB",
                                     level='Koordinator',
                                     form_data=rab_data,
-                                    approval_url=None,  # Tidak perlu approval untuk notifikasi Terkunci
-                                    rejection_url=None
+                                    approval_url=approval_url,
+                                    rejection_url=rejection_url
                                 )
                                 
                                 # Kirim email ke Koordinator
                                 google_provider.send_email(
                                     to=coordinator_emails,
-                                    subject=f"[NOTIFIKASI] Status Proyek TERKUNCI - RAB {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                                    subject=f"[NOTIFIKASI STATUS TERKUNCI] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
                                     html_body=email_html,
                                     attachments=attachments if attachments else None
                                 )
