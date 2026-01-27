@@ -1489,6 +1489,8 @@ def insert_gantt_data():
     """
     Insert data baru ke sheet Gantt Chart.
     Request body berisi field-field sesuai header sheet.
+    
+    Jika Status = "Terkunci", kirim email notifikasi ke Koordinator.
     """
     data = request.get_json()
     if not data:
@@ -1513,6 +1515,76 @@ def insert_gantt_data():
         result = google_provider.insert_gantt_chart_data(data)
         
         if result["success"]:
+            # --- CEK STATUS "Terkunci" DAN KIRIM EMAIL KE KOORDINATOR ---
+            status_request = data.get(config.COLUMN_NAMES.STATUS, "").strip()
+            
+            if status_request.lower() == "terkunci":
+                try:
+                    # Ambil data RAB dari DATA_ENTRY_SHEET_NAME berdasarkan nomor_ulok dan lingkup
+                    rab_data = google_provider.get_rab_data_by_ulok_and_lingkup(nomor_ulok, lingkup)
+                    
+                    if rab_data:
+                        cabang = rab_data.get(config.COLUMN_NAMES.CABANG, "")
+                        
+                        if cabang:
+                            # Ambil email Koordinator berdasarkan cabang
+                            coordinator_emails = google_provider.get_emails_by_jabatan(
+                                cabang,
+                                config.JABATAN.KOORDINATOR
+                            )
+                            
+                            if coordinator_emails:
+                                # Siapkan data untuk template email
+                                WIB = timezone(timedelta(hours=7))
+                                current_timestamp = datetime.datetime.now(WIB).strftime("%d/%m/%Y %H:%M:%S WIB")
+                                
+                                nama_toko = rab_data.get(config.COLUMN_NAMES.NAMA_TOKO, "") or rab_data.get('Nama_Toko', 'N/A')
+                                proyek = rab_data.get(config.COLUMN_NAMES.PROYEK, "") or rab_data.get('Proyek', 'N/A')
+                                alamat = rab_data.get(config.COLUMN_NAMES.ALAMAT, "") or rab_data.get('Alamat', '')
+                                
+                                # Format nomor ulok untuk display
+                                nomor_ulok_display = nomor_ulok
+                                if isinstance(nomor_ulok, str):
+                                    clean_ulok = nomor_ulok.replace("-", "")
+                                    if len(clean_ulok) == 13 and clean_ulok.endswith('R'):
+                                        nomor_ulok_display = f"{clean_ulok[:4]}-{clean_ulok[4:8]}-{clean_ulok[8:12]}-{clean_ulok[12:]}"
+                                    elif len(clean_ulok) == 12:
+                                        nomor_ulok_display = f"{clean_ulok[:4]}-{clean_ulok[4:8]}-{clean_ulok[8:]}"
+                                
+                                # Render email template
+                                email_html = render_template(
+                                    'terkunci_notification_email_template.html',
+                                    nomor_ulok=nomor_ulok_display,
+                                    nama_toko=nama_toko,
+                                    proyek=proyek,
+                                    cabang=cabang,
+                                    lingkup_pekerjaan=lingkup,
+                                    alamat=alamat,
+                                    timestamp=current_timestamp,
+                                    additional_info=None,
+                                    action_url=None
+                                )
+                                
+                                # Kirim email ke Koordinator
+                                google_provider.send_email(
+                                    to=coordinator_emails,
+                                    subject=f"[NOTIFIKASI] Status Proyek TERKUNCI - {nama_toko} ({nomor_ulok_display}) - {lingkup}",
+                                    html_body=email_html
+                                )
+                                
+                                print(f"✅ Email notifikasi Terkunci berhasil dikirim ke Koordinator: {coordinator_emails}")
+                            else:
+                                print(f"⚠️ Tidak ada email Koordinator untuk cabang: {cabang}")
+                        else:
+                            print(f"⚠️ Field 'Cabang' tidak ditemukan di data RAB untuk Ulok: {nomor_ulok}")
+                    else:
+                        print(f"⚠️ Data RAB tidak ditemukan untuk Ulok: {nomor_ulok}, Lingkup: {lingkup}")
+                        
+                except Exception as email_error:
+                    # Jangan gagalkan operasi utama jika email gagal
+                    print(f"⚠️ Gagal mengirim email notifikasi Terkunci: {email_error}")
+                    traceback.print_exc()
+            
             return jsonify({
                 "status": "success",
                 "message": result["message"],

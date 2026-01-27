@@ -292,11 +292,11 @@ class GoogleServiceProvider:
     def get_all_rab_ulok(self):
         """
         Mengambil daftar unik Nomor Ulok beserta Proyek, Nama Toko, dan Lingkup Pekerjaan 
-        dari sheet APPROVED_DATA_SHEET_NAME untuk dropdown (bukan dari RAB/Form2).
+        dari sheet DATA_ENTRY_SHEET_NAME untuk dropdown (Form2).
         """
         try:
-            # UBAH DISINI: Gunakan worksheet yang mengarah ke APPROVED_DATA_SHEET_NAME
-            worksheet = self.sheet.worksheet(config.APPROVED_DATA_SHEET_NAME)
+            # UBAH DISINI: Gunakan worksheet yang mengarah ke DATA_ENTRY_SHEET_NAME
+            worksheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
             records = worksheet.get_all_records()
 
             ulok_list = []
@@ -3590,3 +3590,62 @@ class GoogleServiceProvider:
             col_num, remainder = divmod(col_num - 1, 26)
             string = chr(65 + remainder) + string
         return string
+
+    def get_rab_data_by_ulok_and_lingkup(self, nomor_ulok, lingkup_pekerjaan):
+        """
+        Mengambil data RAB dari DATA_ENTRY_SHEET_NAME berdasarkan Nomor Ulok dan Lingkup_Pekerjaan.
+        
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk pencarian
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan (SIPIL/ME)
+            
+        Returns:
+        --------
+        dict: Data RAB jika ditemukan, None jika tidak ditemukan
+        """
+        try:
+            target_ulok = self._normalize_ulok(nomor_ulok)
+            target_lingkup = self._normalize_lingkup(lingkup_pekerjaan)
+            
+            rab_sheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
+            all_values = rab_sheet.get_all_values()
+            
+            if not all_values:
+                print("Sheet DATA_ENTRY kosong")
+                return None
+            
+            headers = all_values[0]
+            data_rows = all_values[1:]
+            
+            # Cari index kolom penting
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                print("Kolom Nomor Ulok atau Lingkup_Pekerjaan tidak ditemukan di header")
+                return None
+            
+            # Cari data yang cocok (dari bawah ke atas untuk mendapatkan data terbaru)
+            for row_vals in reversed(data_rows):
+                if len(row_vals) <= max(ulok_idx, lingkup_idx):
+                    continue
+                
+                current_ulok = self._normalize_ulok(row_vals[ulok_idx])
+                current_lingkup = self._normalize_lingkup(row_vals[lingkup_idx])
+                
+                if current_ulok == target_ulok and current_lingkup == target_lingkup:
+                    # Mapping ke dictionary
+                    if len(row_vals) < len(headers):
+                        row_vals = list(row_vals) + [''] * (len(headers) - len(row_vals))
+                    
+                    return dict(zip(headers, row_vals))
+            
+            print(f"Data RAB tidak ditemukan untuk Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}")
+            return None
+            
+        except Exception as e:
+            print(f"Error get_rab_data_by_ulok_and_lingkup: {e}")
+            return None
