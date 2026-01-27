@@ -567,7 +567,7 @@ class GoogleServiceProvider:
         """
         ulok_list = []
         try:
-            worksheet = self.sheet.worksheet(config.APPROVED_DATA_SHEET_NAME)
+            worksheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
             records = worksheet.get_all_records()
             for record in records:
                 if str(record.get('Email_Pembuat', '')).strip().lower() == email.strip().lower():
@@ -592,7 +592,7 @@ class GoogleServiceProvider:
     def get_ulok_by_cabang_pic(self, cabang):
         ulok_list = []
         try:
-            worksheet = self.sheet.worksheet(config.APPROVED_DATA_SHEET_NAME)
+            worksheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
             records = worksheet.get_all_records()
             for record in records:
                 if str(record.get('Cabang', '')).strip().lower() == cabang.strip().lower():
