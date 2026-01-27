@@ -1523,62 +1523,78 @@ def insert_gantt_data():
                     # Ambil data RAB dari DATA_ENTRY_SHEET_NAME berdasarkan nomor_ulok dan lingkup
                     rab_data = google_provider.get_rab_data_by_ulok_and_lingkup(nomor_ulok, lingkup)
                     
-                    if rab_data:
-                        cabang = rab_data.get(config.COLUMN_NAMES.CABANG, "")
+                    if not rab_data:
+                        print(f"⚠️ Data RAB tidak ditemukan untuk Ulok: {nomor_ulok}, Lingkup: {lingkup}")
+                    else:
+                        cabang = rab_data.get(config.COLUMN_NAMES.CABANG, "") or rab_data.get('Cabang', '')
                         
-                        if cabang:
+                        if not cabang:
+                            print(f"⚠️ Field 'Cabang' tidak ditemukan di data RAB untuk Ulok: {nomor_ulok}")
+                        else:
                             # Ambil email Koordinator berdasarkan cabang
                             coordinator_emails = google_provider.get_emails_by_jabatan(
                                 cabang,
                                 config.JABATAN.KOORDINATOR
                             )
                             
-                            if coordinator_emails:
-                                # Siapkan data untuk template email
-                                WIB = timezone(timedelta(hours=7))
-                                current_timestamp = datetime.datetime.now(WIB).strftime("%d/%m/%Y %H:%M:%S WIB")
-                                
+                            if not coordinator_emails:
+                                print(f"⚠️ Tidak ada email Koordinator untuk cabang: {cabang}")
+                            else:
+                                # Ambil informasi dari RAB untuk email
                                 nama_toko = rab_data.get(config.COLUMN_NAMES.NAMA_TOKO, "") or rab_data.get('Nama_Toko', 'N/A')
-                                proyek = rab_data.get(config.COLUMN_NAMES.PROYEK, "") or rab_data.get('Proyek', 'N/A')
-                                alamat = rab_data.get(config.COLUMN_NAMES.ALAMAT, "") or rab_data.get('Alamat', '')
+                                jenis_toko = rab_data.get(config.COLUMN_NAMES.PROYEK, "") or rab_data.get('Proyek', 'N/A')
+                                lingkup_pekerjaan = rab_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "") or lingkup
                                 
                                 # Format nomor ulok untuk display
-                                nomor_ulok_display = nomor_ulok
-                                if isinstance(nomor_ulok, str):
-                                    clean_ulok = nomor_ulok.replace("-", "")
-                                    if len(clean_ulok) == 13 and clean_ulok.endswith('R'):
-                                        nomor_ulok_display = f"{clean_ulok[:4]}-{clean_ulok[4:8]}-{clean_ulok[8:12]}-{clean_ulok[12:]}"
-                                    elif len(clean_ulok) == 12:
-                                        nomor_ulok_display = f"{clean_ulok[:4]}-{clean_ulok[4:8]}-{clean_ulok[8:]}"
+                                nomor_ulok_display = format_ulok(nomor_ulok)
                                 
-                                # Render email template
+                                # Ambil link PDF dari data RAB
+                                link_pdf_nonsbo = rab_data.get(config.COLUMN_NAMES.LINK_PDF_NONSBO, '')
+                                link_pdf_rekap = rab_data.get(config.COLUMN_NAMES.LINK_PDF_REKAP, '')
+                                
+                                # Siapkan attachment - download file dari Drive
+                                attachments = []
+                                
+                                if link_pdf_nonsbo:
+                                    try:
+                                        pdf_nonsbo_bytes = google_provider.download_file_from_link(link_pdf_nonsbo)
+                                        if pdf_nonsbo_bytes:
+                                            pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{nomor_ulok_display}.pdf"
+                                            attachments.append((pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'))
+                                    except Exception as e:
+                                        print(f"⚠️ Gagal download PDF Non-SBO: {e}")
+                                
+                                if link_pdf_rekap:
+                                    try:
+                                        pdf_recap_bytes = google_provider.download_file_from_link(link_pdf_rekap)
+                                        if pdf_recap_bytes:
+                                            pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{nomor_ulok_display}.pdf"
+                                            attachments.append((pdf_recap_filename, pdf_recap_bytes, 'application/pdf'))
+                                    except Exception as e:
+                                        print(f"⚠️ Gagal download PDF Rekap: {e}")
+                                
+                                # Tambahkan Status Terkunci ke rab_data untuk ditampilkan di template
+                                rab_data[config.COLUMN_NAMES.STATUS] = "Terkunci"
+                                
+                                # Render email template sama seperti submit_rab()
                                 email_html = render_template(
-                                    'terkunci_notification_email_template.html',
-                                    nomor_ulok=nomor_ulok_display,
-                                    nama_toko=nama_toko,
-                                    proyek=proyek,
-                                    cabang=cabang,
-                                    lingkup_pekerjaan=lingkup,
-                                    alamat=alamat,
-                                    timestamp=current_timestamp,
-                                    additional_info=None,
-                                    action_url=None
+                                    'email_template.html',
+                                    doc_type="GANTT CHART",
+                                    level='Koordinator',
+                                    form_data=rab_data,
+                                    approval_url=None,  # Tidak perlu approval untuk notifikasi Terkunci
+                                    rejection_url=None
                                 )
                                 
                                 # Kirim email ke Koordinator
                                 google_provider.send_email(
                                     to=coordinator_emails,
-                                    subject=f"[NOTIFIKASI] Status Proyek TERKUNCI - {nama_toko} ({nomor_ulok_display}) - {lingkup}",
-                                    html_body=email_html
+                                    subject=f"[NOTIFIKASI] Status Proyek TERKUNCI - RAB {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                                    html_body=email_html,
+                                    attachments=attachments if attachments else None
                                 )
                                 
                                 print(f"✅ Email notifikasi Terkunci berhasil dikirim ke Koordinator: {coordinator_emails}")
-                            else:
-                                print(f"⚠️ Tidak ada email Koordinator untuk cabang: {cabang}")
-                        else:
-                            print(f"⚠️ Field 'Cabang' tidak ditemukan di data RAB untuk Ulok: {nomor_ulok}")
-                    else:
-                        print(f"⚠️ Data RAB tidak ditemukan untuk Ulok: {nomor_ulok}, Lingkup: {lingkup}")
                         
                 except Exception as email_error:
                     # Jangan gagalkan operasi utama jika email gagal
