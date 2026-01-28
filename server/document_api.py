@@ -16,7 +16,7 @@ doc_bp = Blueprint('document_api', __name__)
 # Untuk simplifikasi, kita asumsikan google_provider dibuat di app.py dan kita import helpernya
 # Tapi cara terbaik di Flask adalah membuat instance baru atau menggunakan 'current_app'
 # Di sini kita buat instance baru khusus blueprint ini agar mandiri
-provider = GoogleServiceProvider()
+
 
 # --- HELPERS DARI MAIN.PY LAMA ---
 CUSTOM_MIME_MAP = {
@@ -57,6 +57,7 @@ def login_doc():
         return jsonify({"detail": "Username dan password wajib diisi"}), 400
 
     try:
+        provider = GoogleServiceProvider()
         # Akses sheet Cabang via provider
         ws = provider.sheet.worksheet("Cabang")
         records = ws.get_all_records()
@@ -99,6 +100,7 @@ def login_doc():
 def list_documents():
     cabang = request.args.get('cabang')
     try:
+        provider = GoogleServiceProvider()
         # Buka spreadsheet penyimpanan
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
         ws = provider.doc_sheet.worksheet(config.DOC_SHEET_NAME)
@@ -127,6 +129,7 @@ def list_documents():
 @doc_bp.route('/api/doc/save', methods=['POST'])
 def save_document_base64():
     try:
+        provider = GoogleServiceProvider()
         payload = request.get_json()
         
         kode_toko = payload.get("kode_toko")
@@ -225,6 +228,7 @@ def save_document_base64():
 @doc_bp.route('/api/doc/update/<kode_toko>', methods=['PUT'])
 def update_document(kode_toko):
     try:
+        provider = GoogleServiceProvider()
         data = request.get_json()
         files = data.get("files", [])
         email = data.get("email", "")
@@ -415,6 +419,7 @@ def update_document(kode_toko):
 @doc_bp.route('/api/doc/delete/<kode_toko>', methods=['DELETE'])
 def delete_document(kode_toko):
     try:
+        provider = GoogleServiceProvider()
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
         ws = doc_sheet.worksheet(config.DOC_SHEET_NAME)
         records = ws.get_all_records()
@@ -438,6 +443,7 @@ def delete_document(kode_toko):
 @doc_bp.route('/api/doc/detail/<kode_toko>', methods=['GET'])
 def get_document_detail(kode_toko):
     try:
+        provider = GoogleServiceProvider()
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
         ws = doc_sheet.worksheet(config.DOC_SHEET_NAME)
         records = ws.get_all_records()
