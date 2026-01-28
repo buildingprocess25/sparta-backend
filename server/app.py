@@ -1592,15 +1592,20 @@ def insert_gantt_data():
                                     f"?row={rab_row_index}&level=coordinator"
                                     f"&approver={approver_for_link}"
                                 )
+
+                                gantt_url = (
+                                    f"https://sparta-alfamart.vercel.app/gantt/view.html?ulok={nomor_ulok}&lingkup={lingkup}&locked=true"
+                                )
                                 
                                 # Render email template sama seperti submit_rab()
                                 email_html = render_template(
-                                    'email_template.html',
+                                    'email_template_gantt.html',
                                     doc_type="RAB",
                                     level='Koordinator',
                                     form_data=rab_data,
                                     approval_url=approval_url,
-                                    rejection_url=rejection_url
+                                    rejection_url=rejection_url,
+                                    gantt_url=gantt_url
                                 )
                                 
                                 # Kirim email ke Koordinator
