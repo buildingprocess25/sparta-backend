@@ -1577,7 +1577,7 @@ def insert_gantt_data():
                                 # Kirim email ke Koordinator
                                 google_provider.send_email(
                                     to=coordinator_emails,
-                                    subject=f"[NOTIFIKASI STATUS TERKUNCI] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                                    subject=f"[TAHAP 1: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
                                     html_body=email_html,
                                     attachments=attachments if attachments else None
                                 )

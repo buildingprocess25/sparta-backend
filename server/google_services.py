@@ -369,8 +369,7 @@ class GoogleServiceProvider:
                 config.COLUMN_NAMES.LINGKUP_PEKERJAAN,
                 config.COLUMN_NAMES.NAMA_TOKO,
                 config.COLUMN_NAMES.DURASI_PEKERJAAN,
-                config.COLUMN_NAMES.KATEGORI_LOKASI,
-                config.COLUMN_NAMES.KODE_TOKO
+                config.COLUMN_NAMES.KATEGORI_LOKASI
             ]
             
             if all_rab_values:
