@@ -1862,6 +1862,73 @@ class GoogleServiceProvider:
         
         return self.insert_day_gantt_chart_data(data_list)
 
+    def set_gantt_status_active(self, nomor_ulok, lingkup_pekerjaan):
+        """
+        Update kolom Status menjadi "Active" pada sheet Gantt Chart berdasarkan
+        kombinasi Nomor Ulok dan Lingkup_Pekerjaan.
+
+        Jika baris tidak ditemukan, fungsi akan mengembalikan False tanpa error.
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            if not all_values or len(all_values) < 2:
+                return False
+
+            headers = all_values[0]
+            data_rows = all_values[1:]
+
+            # Cari index kolom penting
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                # Coba fallback nama lain jika ada
+                ulok_idx = headers.index("Nomor Ulok") if "Nomor Ulok" in headers else None
+                if ulok_idx is None:
+                    return False
+
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                lingkup_idx = headers.index("Lingkup_Pekerjaan") if "Lingkup_Pekerjaan" in headers else None
+                if lingkup_idx is None:
+                    return False
+
+            try:
+                status_idx = headers.index(config.COLUMN_NAMES.STATUS)
+            except ValueError:
+                status_idx = headers.index("Status") if "Status" in headers else None
+                if status_idx is None:
+                    return False
+
+            target_ulok = str(nomor_ulok).strip().upper()
+            target_lingkup = str(lingkup_pekerjaan).strip().lower()
+
+            # Cari baris yang cocok (dari bawah ke atas untuk match terbaru)
+            found_row_index = None
+            for idx, row in enumerate(reversed(data_rows)):
+                # idx dari bawah; hitung ulang ke indeks asli
+                original_idx = len(data_rows) - idx - 1
+                if len(row) <= max(ulok_idx, lingkup_idx):
+                    continue
+
+                current_ulok = str(row[ulok_idx]).strip().upper()
+                current_lingkup = str(row[lingkup_idx]).strip().lower()
+
+                if current_ulok == target_ulok and current_lingkup == target_lingkup:
+                    found_row_index = original_idx + 2  # +2 untuk header dan 0-index
+                    break
+
+            if not found_row_index:
+                return False
+
+            cell_range = gspread.utils.rowcol_to_a1(found_row_index, status_idx + 1)
+            worksheet.update(cell_range, [["Active"]], value_input_option='USER_ENTERED')
+            return True
+        except Exception as e:
+            print(f"Error set_gantt_status_active: {e}")
+            return False
+
     
     # akhir gantt chart
 

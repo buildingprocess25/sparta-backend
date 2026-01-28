@@ -960,6 +960,16 @@ def handle_rab_approval():
             
             google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, new_status)
             google_provider.update_cell(row, 'Alasan Penolakan', reason)
+
+            # Update status di Gantt Chart menjadi Active berdasarkan Ulok & Lingkup
+            try:
+                nomor_ulok_gc = row_data.get(config.COLUMN_NAMES.LOKASI)
+                lingkup_gc = row_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+                if nomor_ulok_gc and lingkup_gc:
+                    google_provider.set_gantt_status_active(nomor_ulok_gc, lingkup_gc)
+            except Exception as _gantt_err:
+                print(f"Warning: gagal update status gantt Active saat reject RAB: {_gantt_err}")
+
             if creator_email:
                 subject = f"[DITOLAK] Pengajuan RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}"
                 body = (f"<p>Pengajuan RAB Toko <b>{nama_toko}</b> untuk proyek <b>{jenis_toko} - {lingkup_pekerjaan}</b> telah <b>DITOLAK</b>.</p>"
@@ -1347,6 +1357,7 @@ def handle_rab_2_approval():
             # 2. Update Status & Alasan di Spreadsheet
             google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, new_status)
             google_provider.update_cell_by_sheet(worksheet, row, 'Alasan Penolakan', reason)
+
             
             # 3. Kirim Email Notifikasi ke Pembuat (Kontraktor/Support)
             creator_email = row_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
