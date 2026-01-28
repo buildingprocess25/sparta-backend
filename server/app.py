@@ -477,55 +477,10 @@ def submit_rab():
             final_row_index = new_row_index
             print(f"RAB Baru: Menambah baris {final_row_index}")
 
-        # --- 7) KIRIM EMAIL KE KOORDINATOR ---
-        cabang = data.get('Cabang')
-        if not cabang:
-            raise Exception("Field 'Cabang' is empty. Cannot find Coordinator.")
-
-        coordinator_emails = google_provider.get_emails_by_jabatan(
-            cabang,
-            config.JABATAN.KOORDINATOR
-        )
-        if not coordinator_emails:
-            raise Exception(
-                f"Tidak ada email Koordinator yang ditemukan untuk cabang '{cabang}'."
-            )
-
-        base_url = "https://sparta-backend-5hdj.onrender.com"
-        approver_for_link = coordinator_emails[0]
-        approval_url = (
-            f"{base_url}/api/handle_rab_approval"
-            f"?action=approve&row={final_row_index}"
-            f"&level=coordinator&approver={approver_for_link}"
-        )
-        rejection_url = (
-            f"{base_url}/api/reject_form/rab"
-            f"?row={final_row_index}&level=coordinator"
-            f"&approver={approver_for_link}"
-        )
-
-        email_html = render_template(
-            'email_template.html',
-            doc_type="RAB",
-            level='Koordinator',
-            form_data=data,
-            approval_url=approval_url,
-            rejection_url=rejection_url
-        )
-
-        google_provider.send_email(
-            to=coordinator_emails,
-            subject=f"[TAHAP 1: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
-            html_body=email_html,
-            attachments=[
-                (pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'),
-                (pdf_recap_filename, pdf_recap_bytes, 'application/pdf')
-            ]
-        )
-
+        # --- 7) SKIP KIRIM EMAIL KOORDINATOR ---
         return jsonify({
             "status": "success",
-            "message": "Data successfully submitted/updated and approval email sent."
+            "message": "Data successfully submitted/updated."
         }), 200
 
     except Exception as e:
