@@ -27,7 +27,7 @@ from dokumentasi_api import dokumentasi_bp # <--- dokumentasi bangunan
 load_dotenv()
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 Megabytes
+app.config['MAX_CONTENT_LENGTH'] = 900 * 1024 * 1024  # 900 Megabytes
 
 CORS(app,
      origins=[
