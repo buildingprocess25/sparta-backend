@@ -15,7 +15,7 @@ from num2words import num2words
 
 import config
 from google_services import GoogleServiceProvider
-from pdf_generator import create_pdf_from_data, create_recap_pdf
+from pdf_generator import create_pdf_from_data, create_recap_pdf, create_recap_pdf_il, create_pdf_from_data_il
 from spk_generator import create_spk_pdf
 from pengawasan_email_logic import get_email_details, FORM_LINKS
 # Tambahkan import ini di bagian paling atas file app.py jika belum ada
@@ -611,8 +611,8 @@ def submit_rab_kedua():
         # --- ENDLOGIKA UTAMA ---
 
         # --- GENERATE PDF OTOMATIS ---
-        pdf_nonsbo_bytes = create_pdf_from_data(google_provider, data, exclude_sbo=True)
-        pdf_recap_bytes = create_recap_pdf(google_provider, data)
+        pdf_nonsbo_bytes = create_pdf_from_data_il(google_provider, data, exclude_sbo=True)
+        pdf_recap_bytes = create_recap_pdf_il(google_provider, data)
 
         pdf_nonsbo_filename = f"IL_NON-SBO_{jenis_toko}_{nomor_ulok_formatted}.pdf"
         pdf_recap_filename = f"REKAP_IL_{jenis_toko}_{nomor_ulok_formatted}.pdf"
@@ -1139,8 +1139,8 @@ def handle_rab_2_approval():
                     nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
                     lingkup_pekerjaan = row_data.get('Lingkup_Pekerjaan', row_data.get('lingkup_pekerjaan', 'N/A'))
 
-                    pdf_nonsbo_bytes = create_pdf_from_data(google_provider, row_data, exclude_sbo=True)
-                    pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
+                    pdf_nonsbo_bytes = create_pdf_from_data_il(google_provider, row_data, exclude_sbo=True)
+                    pdf_recap_bytes = create_recap_pdf_il(google_provider, row_data)
                     
                     pdf_nonsbo_filename = f"IL_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
                     pdf_recap_filename = f"REKAP_IL_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
@@ -1188,10 +1188,10 @@ def handle_rab_2_approval():
                 lingkup_pekerjaan = row_data.get('Lingkup_Pekerjaan', row_data.get('lingkup_pekerjaan', 'N/A'))
 
 
-                pdf_nonsbo_bytes = create_pdf_from_data(google_provider, row_data, exclude_sbo=True)
+                pdf_nonsbo_bytes = create_pdf_from_data_il(google_provider, row_data, exclude_sbo=True)
                 pdf_nonsbo_filename = f"DISETUJUI_IL_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
 
-                pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
+                pdf_recap_bytes = create_recap_pdf_il(google_provider, row_data)
                 pdf_recap_filename = f"DISETUJUI_REKAP_IL_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
 
                 # 4. Upload PDF Final ke Google Drive

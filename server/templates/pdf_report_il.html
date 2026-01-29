@@ -189,7 +189,7 @@
             <p>Cabang {{ data['Cabang'] }}</p>
         </div>
         <div class="header-title">
-            <h1>RENCANA ANGGARAN BIAYA</h1>
+            <h1>INSTRUKSI LAPANGAN</h1>
         </div>
 
         <div class="section-info">
@@ -218,37 +218,6 @@
                     <td>LINGKUP PEKERJAAN</td>
                     <td>:</td>
                     <td>{{ data['Lingkup_Pekerjaan'] or '' }}</td>
-                </tr>
-
-                <tr>
-                    <td>LUAS AREA PARKIR</td>
-                    <td>:</td>
-                    <td>{{ data['Luas Area Parkir'] or '' }} m²</td>
-                </tr>
-                <tr>
-                    <td>LUAS AREA SALES</td>
-                    <td>:</td>
-                    <td>{{ data['Luas Area Sales'] or '' }} m²</td>
-                </tr>
-                <tr>
-                    <td>LUAS GUDANG</td>
-                    <td>:</td>
-                    <td>{{ data['Luas Gudang'] or '' }} m²</td>
-                </tr>
-                <tr>
-                    <td>LUAS BANGUNAN</td>
-                    <td>:</td>
-                    <td>{{ data['Luas Bangunan'] or '' }} m²</td>
-                </tr>
-                <tr>
-                    <td>LUAS AREA TERBUKA</td>
-                    <td>:</td>
-                    <td>{{ data['Luas Area Terbuka'] or '' }} m²</td>
-                </tr>
-                <tr>
-                    <td>LUAS TERBANGUNAN</td>
-                    <td>:</td>
-                    <td>{{ data['Luas Terbangunan'] or '' }} m²</td>
                 </tr>
                 <tr>
                     <td>TANGGAL PENGAJUAN</td>
@@ -338,7 +307,7 @@
                     {{ creator_details | safe }}
                     <div class="signature-line"></div>
                 </div>
-                <p class="jabatan">{{ JABATAN.KONTRAKTOR }}</p>
+                <p class="jabatan">{{ JABATAN.SUPPORT }}</p>
             </div>
             <div class="signature-box">
                 <p class="title">Mengetahui</p>
