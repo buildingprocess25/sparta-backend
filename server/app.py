@@ -49,6 +49,8 @@ CORS(app,
          "https://opnamebnm.vercel.app/",
          "https://penyimpanan-dokumen.vercel.app",
          "https://penyimpanan-dokumen.vercel.app/",
+         "https://dokumentasi-bangunan.vercel.app",
+         "https://dokumentasi-bangunan.vercel.app/",
 
      ],
      methods=["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],

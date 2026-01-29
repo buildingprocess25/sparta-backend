@@ -75,7 +75,7 @@ def doc_login():
     except ValueError:
         return jsonify({"ok": False, "message": "Header Sheet Cabang tidak sesuai"}), 500
 
-    ALLOWED_ROLES = ["BRANCH BUILDING SUPPORT", "BRANCH BUILDING COORDINATOR"]
+    ALLOWED_ROLES = ["BRANCH BUILDING SUPPORT", "BRANCH BUILDING COORDINATOR", "BRANCH BUILDING & MAINTENANCE MANAGER"]
 
     for r in rows[1:]:
         if len(r) > max(email_idx, cabang_idx, jabatan_idx, nama_idx):
