@@ -6,6 +6,7 @@ from datetime import timezone, timedelta
 import base64
 import io
 import re
+import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -195,17 +196,48 @@ def doc_save_temp():
     
     photo_cell_value = ""
     
-    # A. Upload Base64
+    # A. Upload Base64 (User ambil foto normal)
     if base64_photo and photo_id is not None:
         filename = f"{nomor_ulok}_foto_{photo_id}.jpg"
         fid = provider.dokumentasi_upload_image(base64_photo, filename)
         if fid:
             photo_cell_value = drive_file_public_url(fid)
             
-    # B. Tidak Bisa Difoto
+    # =========================================================================
+    # B. TIDAK BISA DIFOTO (Logic Baru: Upload file lokal ke Drive)
+    # =========================================================================
     elif photo_note == "TIDAK BISA DIFOTO" and photo_id is not None:
-        # Gunakan ID foto default dari config
-        photo_cell_value = drive_file_public_url(config.DOC_DEFAULT_PHOTO_ID)
+        try:
+            # Cari path file default di folder static
+            # Asumsi struktur: server/dokumentasi_api.py dan server/static/fototidakbisadiambil.jpeg
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            default_path = os.path.join(current_dir, "static", "fototidakbisadiambil.jpeg")
+
+            if os.path.exists(default_path):
+                # 1. Baca file lokal
+                with open(default_path, "rb") as f:
+                    raw = f.read()
+                
+                # 2. Convert ke base64 string
+                base64_default = "data:image/jpeg;base64," + base64.b64encode(raw).decode()
+                
+                # 3. Upload sebagai file baru ke Drive
+                filename = f"{nomor_ulok}_foto_{photo_id}.jpg"
+                fid = provider.dokumentasi_upload_image(base64_default, filename)
+                
+                if fid:
+                    photo_cell_value = drive_file_public_url(fid)
+                else:
+                    print("Gagal upload foto default ke Drive")
+            else:
+                print(f"File default tidak ditemukan di: {default_path}")
+                # Fallback ke config jika file lokal hilang
+                photo_cell_value = drive_file_public_url(config.DOC_DEFAULT_PHOTO_ID)
+
+        except Exception as e:
+            print(f"Error proses foto default: {e}")
+            # Fallback terakhir
+            photo_cell_value = drive_file_public_url(config.DOC_DEFAULT_PHOTO_ID)
         
     # C. Tidak berubah -> Pakai nilai lama
     elif photo_id is not None:
