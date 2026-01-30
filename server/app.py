@@ -65,6 +65,12 @@ app.register_blueprint(doc_bp)
 app.register_blueprint(dokumentasi_bp) # <--- dokumentasi bangunan
 app.json.sort_keys = False
 
+# --- LOGGING HELPER ---
+def log_app(func: str, message: str, **kwargs):
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    extra = " | ".join(f"{k}={v}" for k, v in kwargs.items()) if kwargs else ""
+    print(f"[APP][{func}] {ts} - {message}{' | ' + extra if extra else ''}")
+
 # --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---
 GAS_URLS = {
   "input-pic": "https://script.google.com/macros/s/AKfycbzMWfroqPvtZXA1gz5VqdUzJhtyV_q8hWH92gl7JqFct5_dTVI2mcwmDHY6Rac5vmu-ww/exec",
@@ -219,6 +225,7 @@ def get_tanggal_h(start_date, jumlah_hari_kerja):
 
 @app.route('/')
 def index():
+    log_app("index", "health check")
     return "Backend server is running and healthy.", 200
 
 # --- ENDPOINTS OTENTIKASI & DATA UMUM ---
@@ -227,42 +234,55 @@ def login():
     data = request.get_json()
     email = data.get('email')
     cabang = data.get('cabang')
+    log_app("login", "request received", email=email, cabang=cabang)
     if not email or not cabang:
+        log_app("login", "missing parameters", has_email=bool(email), has_cabang=bool(cabang))
         return jsonify({"status": "error", "message": "Email and cabang are required"}), 400
     try:
         is_valid, role = google_provider.validate_user(email, cabang)
         if is_valid:
+            log_app("login", "success", email=email, role=role)
             return jsonify({"status": "success", "message": "Login successful", "role": role}), 200
         else:
+            log_app("login", "invalid credentials", email=email, cabang=cabang)
             return jsonify({"status": "error", "message": "Invalid credentials"}), 401
     except Exception as e:
         traceback.print_exc()
+        log_app("login", "error", error=str(e))
         return jsonify({"status": "error", "message": "An internal server error occurred"}), 500
 
 @app.route('/api/check_status', methods=['GET'])
 def check_status():
     email = request.args.get('email')
     cabang = request.args.get('cabang')
+    log_app("check_status", "request received", email=email, cabang=cabang)
     if not email or not cabang:
+        log_app("check_status", "missing parameters", has_email=bool(email), has_cabang=bool(cabang))
         return jsonify({"error": "Email and cabang parameters are missing"}), 400
     try:
         status_data = google_provider.check_user_submissions(email, cabang)
+        log_app("check_status", "success")
         return jsonify(status_data), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("check_status", "error", error=str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/check_status_rab_2', methods=['GET'])
 def check_status_rab_2():
     email = request.args.get('email')
     cabang = request.args.get('cabang')
+    log_app("check_status_rab_2", "request received", email=email, cabang=cabang)
     if not email or not cabang:
+        log_app("check_status_rab_2", "missing parameters", has_email=bool(email), has_cabang=bool(cabang))
         return jsonify({"error": "Email and cabang parameters are missing"}), 400
     try:
         status_data = google_provider.check_user_submissions_rab_2(email, cabang)
+        log_app("check_status_rab_2", "success")
         return jsonify(status_data), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("check_status_rab_2", "error", error=str(e))
         return jsonify({"error": str(e)}), 500
 
 def get_pt_name_by_email(provider, email):
@@ -280,20 +300,23 @@ def get_pt_name_by_email(provider, email):
                 # Pastikan nama kolom PT di sheet Cabang sesuai (misal: 'Nama_PT' atau 'NAMA PT')
                 return record.get('Nama_PT', '').strip() or record.get('NAMA PT', '').strip()
     except Exception as e:
-        print(f"Error fetching PT Name: {e}")
+        log_app("get_pt_name_by_email", "error", email=email, error=str(e))
     return "NAMA PT TIDAK DITEMUKAN"
 
 @app.route('/api/check_ulok_rab_2', methods=['GET'])
 def check_ulok_rab_2():
     ulok = request.args.get('ulok')
+
+    log_app("check_ulok_rab_2", "request received", ulok=ulok)
     
     if not ulok:
+        log_app("check_ulok_rab_2", "missing parameter")
         return jsonify({"status": "error", "message": "Parameter ulok dibutuhkan"}), 400
 
     try:
         # Panggil fungsi helper yang baru kita buat
         result = google_provider.check_ulok_exists_rab_2(ulok)
-        
+        log_app("check_ulok_rab_2", "success")
         return jsonify({
             "status": "success",
             "data": result
@@ -301,6 +324,7 @@ def check_ulok_rab_2():
         
     except Exception as e:
         traceback.print_exc()
+        log_app("check_ulok_rab_2", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # --- ENDPOINTS UNTUK ALUR KERJA RAB ---
@@ -308,14 +332,17 @@ def check_ulok_rab_2():
 def submit_rab():
     data = request.get_json()
     if not data:
+        log_app("submit_rab", "invalid json")
         return jsonify({"status": "error", "message": "Invalid JSON data"}), 400
 
     new_row_index = None
     try:
+        log_app("submit_rab", "request received", ulok=data.get(config.COLUMN_NAMES.LOKASI), lingkup=data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN))
         nomor_ulok_raw = data.get(config.COLUMN_NAMES.LOKASI, '')
         lingkup_pekerjaan = data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, '')
 
         if not nomor_ulok_raw:
+            log_app("submit_rab", "missing ulok")
             return jsonify({
                 "status": "error",
                 "message": "Nomor Ulok tidak boleh kosong."
@@ -325,6 +352,7 @@ def submit_rab():
         # Jika ditemukan data yang sedang berjalan dengan ULOK & LINGKUP sama, BLOKIR.
         # Fungsi ini sekarang sudah support format Renovasi (13 digit) & New Store (12 digit).
         if google_provider.check_ulok_exists(nomor_ulok_raw, lingkup_pekerjaan):
+            log_app("submit_rab", "duplicate ulok", ulok=nomor_ulok_raw, lingkup=lingkup_pekerjaan)
             return jsonify({
                 "status": "error",
                 "message": (
@@ -339,6 +367,7 @@ def submit_rab():
             nomor_ulok_raw, 
             lingkup_pekerjaan
         )
+        log_app("submit_rab", "rejected row lookup", rejected_row_index=rejected_row_index or "-")
 
         # 1. Ambil Email Pembuat
         email_pembuat = data.get('Email_Pembuat')
@@ -469,7 +498,7 @@ def submit_rab():
                 data
             )
             final_row_index = rejected_row_index
-            print(f"Revisi RAB: Mengupdate baris {final_row_index}")
+            log_app("submit_rab", "revisi update", row=final_row_index)
         else:
             # === KASUS BARU: Tambah Baris Baru ===
             new_row_index = google_provider.append_to_sheet(
@@ -477,7 +506,7 @@ def submit_rab():
                 config.DATA_ENTRY_SHEET_NAME
             )
             final_row_index = new_row_index
-            print(f"RAB Baru: Menambah baris {final_row_index}")
+            log_app("submit_rab", "new row added", row=final_row_index)
 
         # --- 7) SKIP KIRIM EMAIL KOORDINATOR ---
         return jsonify({
@@ -493,6 +522,7 @@ def submit_rab():
                 new_row_index
             )
         traceback.print_exc()
+        log_app("submit_rab", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/submit_rab_kedua', methods=['POST'])
@@ -505,6 +535,8 @@ def submit_rab_kedua():
     try:
         # --- PERBAIKAN 2: Pengecekan Content Type yang lebih aman ---
         content_type = request.content_type or ""
+
+        log_app("submit_rab_kedua", "request received", content_type=content_type)
 
         if content_type.startswith('multipart/form-data'):
             # Jika request adalah Form Data (ada file upload)
@@ -526,6 +558,7 @@ def submit_rab_kedua():
             # Jika request adalah JSON biasa
             data = request.get_json()
             if not data:
+                log_app("submit_rab_kedua", "invalid json")
                 return jsonify({"status": "error", "message": "Invalid JSON data"}), 400
 
         # --- LOGIKA UTAMA (SAMA SEPERTI SEBELUMNYA) ---
@@ -534,6 +567,7 @@ def submit_rab_kedua():
         lingkup_pekerjaan = data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, '')
 
         if not nomor_ulok_raw:
+            log_app("submit_rab_kedua", "missing ulok")
             return jsonify({
                 "status": "error",
                 "message": "Nomor Ulok tidak boleh kosong."
@@ -546,6 +580,7 @@ def submit_rab_kedua():
         )
 
         if not is_revising and google_provider.check_ulok_exists(nomor_ulok_raw, lingkup_pekerjaan):
+            log_app("submit_rab_kedua", "duplicate ulok", ulok=nomor_ulok_raw, lingkup=lingkup_pekerjaan)
             return jsonify({
                 "status": "error",
                 "message": (
@@ -679,6 +714,7 @@ def submit_rab_kedua():
 
             # Jika ditemukan baris yang ditolak sebelumnya, jangan append. Ubah statusnya ke waiting sesuai asal penolakan
             if existing_row_index:
+                log_app("submit_rab_kedua", "reuse rejected row", row=existing_row_index)
                 previous_status = worksheet.cell(existing_row_index, col_status).value if col_status else ""
                 if previous_status == config.STATUS.REJECTED_BY_COORDINATOR:
                     new_status_for_existing = config.STATUS.WAITING_FOR_COORDINATOR
@@ -724,9 +760,10 @@ def submit_rab_kedua():
                     config.DATA_ENTRY_SHEET_NAME_RAB_2,
                     data
                 )
+                log_app("submit_rab_kedua", "new row added", row=new_row_index)
         except Exception as sheet_check_err:
             # Jika terjadi error saat cek, fallback ke append agar tidak memblokir alur
-            print(f"Warning: gagal cek double data RAB 2: {sheet_check_err}")
+            log_app("submit_rab_kedua", "warning double data check failed", error=str(sheet_check_err))
             new_row_index = google_provider.append_to_dynamic_sheet(
                 config.SPREADSHEET_ID_RAB_2,
                 config.DATA_ENTRY_SHEET_NAME_RAB_2,
@@ -773,6 +810,8 @@ def submit_rab_kedua():
             attachments=attachments_list
         )
 
+        log_app("submit_rab_kedua", "success", row=new_row_index, cabang=cabang, email_count=len(coordinator_emails))
+
         return jsonify({
             "status": "success",
             "message": "Data submitted successfully (RAB 2).",
@@ -785,6 +824,7 @@ def submit_rab_kedua():
 
     except Exception as e:
         traceback.print_exc()
+        log_app("submit_rab_kedua", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -793,12 +833,16 @@ def reject_form_rab():
     row = request.args.get('row')
     level = request.args.get('level')
     approver = request.args.get('approver')
+
+    log_app("reject_form_rab", "request received", row=row, level=level, approver=approver)
     
     if not all([row, level, approver]):
+        log_app("reject_form_rab", "missing parameters")
         return "Parameter tidak lengkap.", 400
 
     row_data = google_provider.get_row_data(int(row))
     if not row_data:
+        log_app("reject_form_rab", "row not found", row=row)
         return "Data permintaan tidak ditemukan.", 404
 
     logo_url = url_for('static', filename='Alfamart-Emblem.png', _external=True)
@@ -820,8 +864,11 @@ def reject_form_rab_kedua():
     row = request.args.get('row')
     level = request.args.get('level')
     approver = request.args.get('approver')
+
+    log_app("reject_form_rab_kedua", "request received", row=row, level=level, approver=approver)
     
     if not all([row, level, approver]):
+        log_app("reject_form_rab_kedua", "missing parameters")
         return "Parameter tidak lengkap.", 400
 
     try:
@@ -834,6 +881,7 @@ def reject_form_rab_kedua():
         row_data = google_provider.get_row_data_by_sheet(worksheet, int(row))
         
         if not row_data:
+            log_app("reject_form_rab_kedua", "row not found", row=row)
             return "Data permintaan tidak ditemukan di Sheet RAB 2.", 404
 
         logo_url = url_for('static', filename='Alfamart-Emblem.png', _external=True)
@@ -853,6 +901,7 @@ def reject_form_rab_kedua():
         )
     except Exception as e:
         traceback.print_exc()
+        log_app("reject_form_rab_kedua", "error", error=str(e))
         return f"Terjadi kesalahan server: {str(e)}", 500
 
 
@@ -871,12 +920,16 @@ def handle_rab_approval():
     
     logo_url = url_for('static', filename='Alfamart-Emblem.png', _external=True)
 
+    log_app("handle_rab_approval", "request received", action=action, row=row_str, level=level, approver=approver)
+
     if not all([action, row_str, level, approver]):
+        log_app("handle_rab_approval", "missing parameters")
         return render_template('response_page.html', title='Incomplete Parameters', message='URL parameters are incomplete.', logo_url=logo_url), 400
     try:
         row = int(row_str)
         row_data = google_provider.get_row_data(row)
         if not row_data:
+            log_app("handle_rab_approval", "row not found", row=row)
             return render_template('response_page.html', title='Data Not Found', message='This request may have been deleted.', logo_url=logo_url)
         
         item_details_json = row_data.get('Item_Details_JSON', '{}')
@@ -892,6 +945,7 @@ def handle_rab_approval():
         
         if current_status != expected_status_map.get(level):
             msg = f'This action has already been processed. Current status: <strong>{current_status}</strong>.'
+            log_app("handle_rab_approval", "already processed", current_status=current_status, level=level)
             return render_template('response_page.html', title='Action Already Processed', message=msg, logo_url=logo_url)
         
         WIB = timezone(timedelta(hours=7))
@@ -918,6 +972,8 @@ def handle_rab_approval():
             google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, new_status)
             google_provider.update_cell(row, 'Alasan Penolakan', reason)
 
+            log_app("handle_rab_approval", "rejected", row=row, level=level, status=new_status)
+
             # Update status di Gantt Chart menjadi Active berdasarkan Ulok & Lingkup
             try:
                 nomor_ulok_gc = row_data.get(config.COLUMN_NAMES.LOKASI)
@@ -941,6 +997,7 @@ def handle_rab_approval():
             google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_MANAGER)
             google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver)
             google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME, current_time)
+            log_app("handle_rab_approval", "approved by coordinator", row=row, approver=approver)
             manager_email = google_provider.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
             if manager_email:
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
@@ -960,6 +1017,7 @@ def handle_rab_approval():
             google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED)
             google_provider.update_cell(row, config.COLUMN_NAMES.MANAGER_APPROVER, approver)
             google_provider.update_cell(row, config.COLUMN_NAMES.MANAGER_APPROVAL_TIME, current_time)
+            log_app("handle_rab_approval", "approved by manager", row=row, approver=approver)
             
             row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.APPROVED
             row_data[config.COLUMN_NAMES.MANAGER_APPROVER] = approver
@@ -1064,6 +1122,7 @@ def handle_rab_approval():
 
     except Exception as e:
         traceback.print_exc()
+        log_app("handle_rab_approval", "error", error=str(e))
         return render_template('response_page.html', title='Internal Error', message=f'An internal error occurred: {str(e)}', logo_url=logo_url), 500
 
 @app.route('/api/handle_rab_2_approval', methods=['GET', 'POST'])
@@ -1081,7 +1140,10 @@ def handle_rab_2_approval():
     
     logo_url = url_for('static', filename='Alfamart-Emblem.png', _external=True)
 
+    log_app("handle_rab_2_approval", "request received", action=action, row=row_str, level=level, approver=approver)
+
     if not all([action, row_str, level, approver]):
+        log_app("handle_rab_2_approval", "missing parameters")
         return "Parameter tidak lengkap", 400
 
     try:
@@ -1094,6 +1156,7 @@ def handle_rab_2_approval():
         row_data = google_provider.get_row_data_by_sheet(worksheet, row)
         
         if not row_data:
+            log_app("handle_rab_2_approval", "row not found", row=row)
             return "Data tidak ditemukan", 404
 
         WIB = timezone(timedelta(hours=7))
@@ -1109,6 +1172,7 @@ def handle_rab_2_approval():
                 google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_MANAGER)
                 google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver)
                 google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME, current_time)
+                log_app("handle_rab_2_approval", "approved by coordinator", row=row, approver=approver)
                 
                 # 2. Update data lokal
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
@@ -1175,6 +1239,7 @@ def handle_rab_2_approval():
                 google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED)
                 google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.MANAGER_APPROVER, approver)
                 google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.MANAGER_APPROVAL_TIME, current_time)
+                log_app("handle_rab_2_approval", "approved by manager", row=row, approver=approver)
                 
                 # 2. Update data lokal variable row_data
                 row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.APPROVED
@@ -1315,6 +1380,8 @@ def handle_rab_2_approval():
             google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, new_status)
             google_provider.update_cell_by_sheet(worksheet, row, 'Alasan Penolakan', reason)
 
+            log_app("handle_rab_2_approval", "rejected", row=row, level=level, status=new_status)
+
             
             # 3. Kirim Email Notifikasi ke Pembuat (Kontraktor/Support)
             creator_email = row_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
@@ -1343,6 +1410,7 @@ def handle_rab_2_approval():
 
     except Exception as e:
         traceback.print_exc()
+        log_app("handle_rab_2_approval", "error", error=str(e))
         return f"Error: {str(e)}", 500
 
 
@@ -1350,38 +1418,50 @@ def handle_rab_2_approval():
 @app.route('/api/get_approved_rab', methods=['GET'])
 def get_approved_rab():
     user_cabang = request.args.get('cabang')
+    log_app("get_approved_rab", "request received", cabang=user_cabang)
     if not user_cabang:
+        log_app("get_approved_rab", "missing cabang")
         return jsonify({"error": "Cabang parameter is missing"}), 400
     try:
         approved_rabs = google_provider.get_approved_rab_by_cabang(user_cabang)
+        log_app("get_approved_rab", "success", count=len(approved_rabs) if approved_rabs else 0)
         return jsonify(approved_rabs), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_approved_rab", "error", error=str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get_approved_rab_kedua', methods=['GET'])
 def get_approved_rab_kedua():
     user_cabang = request.args.get('cabang')
+    log_app("get_approved_rab_kedua", "request received", cabang=user_cabang)
     if not user_cabang:
+        log_app("get_approved_rab_kedua", "missing cabang")
         return jsonify({"error": "Cabang parameter is missing"}), 400
     try:
         approved_rabs = google_provider.get_approved_rab_by_cabang_kedua(user_cabang)
+        log_app("get_approved_rab_kedua", "success", count=len(approved_rabs) if approved_rabs else 0)
         return jsonify(approved_rabs), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_approved_rab_kedua", "error", error=str(e))
         return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/get_kontraktor', methods=['GET'])
 def get_kontraktor():
     user_cabang = request.args.get('cabang')
+    log_app("get_kontraktor", "request received", cabang=user_cabang)
     if not user_cabang:
+        log_app("get_kontraktor", "missing cabang")
         return jsonify({"error": "Cabang parameter is missing"}), 400
     try:
         kontraktor_list = google_provider.get_kontraktor_by_cabang(user_cabang)
+        log_app("get_kontraktor", "success", count=len(kontraktor_list) if kontraktor_list else 0)
         return jsonify(kontraktor_list), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_kontraktor", "error", error=str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get_all_ulok_rab', methods=['GET'])
@@ -1389,17 +1469,22 @@ def get_all_rab_ulok_data_list():
     try:
         # Mengembalikan list of objects langsung form 3
         ulok_list = google_provider.get_all_rab_ulok()
+        log_app("get_all_rab_ulok_data_list", "success", count=len(ulok_list) if ulok_list else 0)
         return jsonify(ulok_list), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_all_rab_ulok_data_list", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/get_gantt_data', methods=['GET'])
 def get_gantt_data():
     ulok = request.args.get('ulok')
     lingkup = request.args.get('lingkup') # Ambil parameter lingkup
+
+    log_app("get_gantt_data", "request received", ulok=ulok, lingkup=lingkup)
     
     if not ulok or not lingkup:
+        log_app("get_gantt_data", "missing parameters", has_ulok=bool(ulok), has_lingkup=bool(lingkup))
         return jsonify({"status": "error", "message": "Parameter ulok dan lingkup diperlukan"}), 400
         
     try:
@@ -1408,6 +1493,7 @@ def get_gantt_data():
         
         # Validasi jika data tidak ditemukan
         if not result['rab']:
+            log_app("get_gantt_data", "not found", ulok=ulok, lingkup=lingkup)
             return jsonify({"status": "error", "message": "Data tidak ditemukan untuk kombinasi Ulok dan Lingkup tersebut"}), 404
             
         return jsonify({
@@ -1421,6 +1507,7 @@ def get_gantt_data():
         
     except Exception as e:
         traceback.print_exc()
+        log_app("get_gantt_data", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -1428,14 +1515,18 @@ def get_gantt_data():
 @app.route('/api/get_ulok_by_email', methods=['GET'])
 def get_ulok_by_email():
     email = request.args.get('email')
+    log_app("get_ulok_by_email", "request received", email=email)
     if not email:
+        log_app("get_ulok_by_email", "missing email")
         return jsonify({"error": "Parameter email kosong"}), 400
 
     try:
         ulok_list = google_provider.get_ulok_by_email(email)
+        log_app("get_ulok_by_email", "success", count=len(ulok_list) if ulok_list else 0)
         return jsonify(ulok_list), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_ulok_by_email", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # Get ulok by Cabang PIC
@@ -1443,13 +1534,17 @@ def get_ulok_by_email():
 @app.route('/api/get_ulok_by_cabang_pic', methods=['GET'])
 def get_ulok_by_cabang_pic():
     cabang = request.args.get('cabang')
+    log_app("get_ulok_by_cabang_pic", "request received", cabang=cabang)
     if not cabang:
+        log_app("get_ulok_by_cabang_pic", "missing cabang")
         return jsonify({"error": "Parameter cabang kosong"}), 400
     try:
         ulok_list = google_provider.get_ulok_by_cabang_pic(cabang)
+        log_app("get_ulok_by_cabang_pic", "success", count=len(ulok_list) if ulok_list else 0)
         return jsonify(ulok_list), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_ulok_by_cabang_pic", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/gantt/insert', methods=['POST'])
@@ -1462,6 +1557,7 @@ def insert_gantt_data():
     """
     data = request.get_json()
     if not data:
+        log_app("insert_gantt_data", "request body empty")
         return jsonify({"status": "error", "message": "Request body kosong"}), 400
     
     # Validasi field wajib
@@ -1469,6 +1565,7 @@ def insert_gantt_data():
     lingkup = data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
     
     if not nomor_ulok or not lingkup:
+        log_app("insert_gantt_data", "missing required fields", ulok=nomor_ulok, lingkup=lingkup)
         return jsonify({
             "status": "error", 
             "message": "Field 'Nomor Ulok' dan 'Lingkup_Pekerjaan' wajib diisi"
@@ -1481,6 +1578,7 @@ def insert_gantt_data():
             data[config.COLUMN_NAMES.TIMESTAMP] = datetime.datetime.now(WIB).isoformat()
         
         result = google_provider.insert_gantt_chart_data(data)
+        log_app("insert_gantt_data", "insert result", success=result.get("success"), row_index=result.get("row_index"))
         
         if result["success"]:
             # --- CEK STATUS "Terkunci" DAN KIRIM EMAIL KE KOORDINATOR ---
@@ -1584,11 +1682,11 @@ def insert_gantt_data():
                                     attachments=attachments if attachments else None
                                 )
                                 
-                                print(f"✅ Email notifikasi Terkunci berhasil dikirim ke Koordinator: {coordinator_emails}")
+                                log_app("insert_gantt_data", "locked email sent", recipients=len(coordinator_emails))
                         
                 except Exception as email_error:
                     # Jangan gagalkan operasi utama jika email gagal
-                    print(f"⚠️ Gagal mengirim email notifikasi Terkunci: {email_error}")
+                    log_app("insert_gantt_data", "locked email failed", error=str(email_error))
                     traceback.print_exc()
             
             return jsonify({
@@ -1604,6 +1702,7 @@ def insert_gantt_data():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("insert_gantt_data", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -1652,6 +1751,7 @@ def insert_day_gantt_data():
     """
     data = request.get_json()
     if not data:
+        log_app("insert_day_gantt_data", "request body empty")
         return jsonify({"status": "error", "message": "Request body kosong"}), 400
     
     try:
@@ -1659,6 +1759,7 @@ def insert_day_gantt_data():
         if isinstance(data, list):
             # Format 1: List langsung (Insert mode)
             if len(data) == 0:
+                log_app("insert_day_gantt_data", "empty list")
                 return jsonify({
                     "status": "error",
                     "message": "List data kosong"
@@ -1676,12 +1777,14 @@ def insert_day_gantt_data():
                 lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
                 
                 if not nomor_ulok or not lingkup_pekerjaan:
+                    log_app("insert_day_gantt_data", "missing required fields", ulok=nomor_ulok, lingkup=lingkup_pekerjaan)
                     return jsonify({
                         "status": "error",
                         "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi untuk mode remove"
                     }), 400
                 
                 if not isinstance(remove_kategori_data, list) or len(remove_kategori_data) == 0:
+                    log_app("insert_day_gantt_data", "remove list empty")
                     return jsonify({
                         "status": "error",
                         "message": "Field 'remove_kategori_data' harus berupa list yang tidak kosong"
@@ -1694,6 +1797,7 @@ def insert_day_gantt_data():
                 )
                 
                 if result["success"]:
+                    log_app("insert_day_gantt_data", "remove success", deleted_count=result.get("deleted_count", 0))
                     return jsonify({
                         "status": "success",
                         "message": result["message"],
@@ -1712,12 +1816,14 @@ def insert_day_gantt_data():
             kategori_data = data.get('kategori_data')
             
             if not nomor_ulok or not lingkup_pekerjaan:
+                log_app("insert_day_gantt_data", "missing required fields", ulok=nomor_ulok, lingkup=lingkup_pekerjaan)
                 return jsonify({
                     "status": "error",
                     "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi"
                 }), 400
             
             if not kategori_data or not isinstance(kategori_data, list):
+                log_app("insert_day_gantt_data", "kategori_data invalid")
                 return jsonify({
                     "status": "error",
                     "message": "Field 'kategori_data' harus berupa list yang tidak kosong"
@@ -1732,6 +1838,7 @@ def insert_day_gantt_data():
             }), 400
         
         if result["success"]:
+            log_app("insert_day_gantt_data", "insert success")
             return jsonify({
                 "status": "success",
                 "message": result["message"],
@@ -1745,6 +1852,7 @@ def insert_day_gantt_data():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("insert_day_gantt_data", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -1788,6 +1896,7 @@ def insert_dependency_gantt_data():
     """
     data = request.get_json()
     if not data:
+        log_app("insert_dependency_gantt_data", "request body empty")
         return jsonify({"status": "error", "message": "Request body kosong"}), 400
     
     try:
@@ -1795,6 +1904,7 @@ def insert_dependency_gantt_data():
         if isinstance(data, list):
             # Format 1: List langsung (Insert mode)
             if len(data) == 0:
+                log_app("insert_dependency_gantt_data", "empty list")
                 return jsonify({
                     "status": "error",
                     "message": "List data kosong"
@@ -1812,12 +1922,14 @@ def insert_dependency_gantt_data():
                 lingkup_pekerjaan = data.get('lingkup_pekerjaan') or data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
                 
                 if not nomor_ulok or not lingkup_pekerjaan:
+                    log_app("insert_dependency_gantt_data", "missing required fields", ulok=nomor_ulok, lingkup=lingkup_pekerjaan)
                     return jsonify({
                         "status": "error",
                         "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi untuk mode remove"
                     }), 400
                 
                 if not isinstance(remove_dependency_data, list) or len(remove_dependency_data) == 0:
+                    log_app("insert_dependency_gantt_data", "remove list empty")
                     return jsonify({
                         "status": "error",
                         "message": "Field 'remove_dependency_data' harus berupa list yang tidak kosong"
@@ -1830,6 +1942,7 @@ def insert_dependency_gantt_data():
                 )
                 
                 if result["success"]:
+                    log_app("insert_dependency_gantt_data", "remove success", deleted_count=result.get("deleted_count", 0))
                     return jsonify({
                         "status": "success",
                         "message": result["message"],
@@ -1848,12 +1961,14 @@ def insert_dependency_gantt_data():
             dependency_data = data.get('dependency_data')
             
             if not nomor_ulok or not lingkup_pekerjaan:
+                log_app("insert_dependency_gantt_data", "missing required fields", ulok=nomor_ulok, lingkup=lingkup_pekerjaan)
                 return jsonify({
                     "status": "error",
                     "message": "Field 'nomor_ulok' dan 'lingkup_pekerjaan' wajib diisi"
                 }), 400
             
             if not dependency_data or not isinstance(dependency_data, list):
+                log_app("insert_dependency_gantt_data", "dependency_data invalid")
                 return jsonify({
                     "status": "error",
                     "message": "Field 'dependency_data' harus berupa list yang tidak kosong"
@@ -1868,6 +1983,7 @@ def insert_dependency_gantt_data():
             }), 400
         
         if result["success"]:
+            log_app("insert_dependency_gantt_data", "insert success")
             return jsonify({
                 "status": "success",
                 "message": result["message"],
@@ -1881,6 +1997,7 @@ def insert_dependency_gantt_data():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("insert_dependency_gantt_data", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -1915,6 +2032,7 @@ def insert_pengawasan_to_gantt():
     """
     data = request.get_json()
     if not data:
+        log_app("insert_pengawasan_to_gantt", "request body empty")
         return jsonify({"status": "error", "message": "Request body kosong"}), 400
     
     nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
@@ -1923,12 +2041,14 @@ def insert_pengawasan_to_gantt():
     remove_day = data.get('remove_day')
     
     if not nomor_ulok:
+        log_app("insert_pengawasan_to_gantt", "missing nomor_ulok")
         return jsonify({
             "status": "error",
             "message": "Field 'nomor_ulok' wajib diisi"
         }), 400
     
     if not lingkup_pekerjaan:
+        log_app("insert_pengawasan_to_gantt", "missing lingkup_pekerjaan")
         return jsonify({
             "status": "error",
             "message": "Field 'lingkup_pekerjaan' wajib diisi"
@@ -1944,6 +2064,7 @@ def insert_pengawasan_to_gantt():
             )
             
             if result["success"]:
+                log_app("insert_pengawasan_to_gantt", "remove success", removed_value=result.get("removed_value"))
                 return jsonify({
                     "status": "success",
                     "message": result["message"],
@@ -1959,10 +2080,12 @@ def insert_pengawasan_to_gantt():
                 
         except Exception as e:
             traceback.print_exc()
+            log_app("insert_pengawasan_to_gantt", "remove error", error=str(e))
             return jsonify({"status": "error", "message": str(e)}), 500
     
     # Mode Insert: jika ada pengawasan_day
     if pengawasan_day is None:
+        log_app("insert_pengawasan_to_gantt", "missing pengawasan_day")
         return jsonify({
             "status": "error",
             "message": "Field 'pengawasan_day' atau 'remove_day' wajib diisi"
@@ -1976,6 +2099,7 @@ def insert_pengawasan_to_gantt():
         )
         
         if result["success"]:
+            log_app("insert_pengawasan_to_gantt", "insert success", value=result.get("value"))
             return jsonify({
                 "status": "success",
                 "message": result["message"],
@@ -1991,6 +2115,7 @@ def insert_pengawasan_to_gantt():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("insert_pengawasan_to_gantt", "insert error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -2013,6 +2138,7 @@ def update_keterlambatan_day_gantt():
     """
     data = request.get_json()
     if not data:
+        log_app("update_keterlambatan_day_gantt", "request body empty")
         return jsonify({"status": "error", "message": "Request body kosong"}), 400
     
     nomor_ulok = data.get('nomor_ulok') or data.get(config.COLUMN_NAMES.LOKASI)
@@ -2024,21 +2150,27 @@ def update_keterlambatan_day_gantt():
     
     # Validasi field wajib
     if not nomor_ulok:
+        log_app("update_keterlambatan_day_gantt", "missing nomor_ulok")
         return jsonify({"status": "error", "message": "Field 'nomor_ulok' wajib diisi"}), 400
     
     if not lingkup_pekerjaan:
+        log_app("update_keterlambatan_day_gantt", "missing lingkup_pekerjaan")
         return jsonify({"status": "error", "message": "Field 'lingkup_pekerjaan' wajib diisi"}), 400
     
     if not kategori:
+        log_app("update_keterlambatan_day_gantt", "missing kategori")
         return jsonify({"status": "error", "message": "Field 'kategori' wajib diisi"}), 400
     
     if not h_awal:
+        log_app("update_keterlambatan_day_gantt", "missing h_awal")
         return jsonify({"status": "error", "message": "Field 'h_awal' wajib diisi"}), 400
     
     if not h_akhir:
+        log_app("update_keterlambatan_day_gantt", "missing h_akhir")
         return jsonify({"status": "error", "message": "Field 'h_akhir' wajib diisi"}), 400
     
     if keterlambatan is None:
+        log_app("update_keterlambatan_day_gantt", "missing keterlambatan")
         return jsonify({"status": "error", "message": "Field 'keterlambatan' wajib diisi"}), 400
     
     try:
@@ -2052,6 +2184,7 @@ def update_keterlambatan_day_gantt():
         )
         
         if result["success"]:
+            log_app("update_keterlambatan_day_gantt", "success", action=result.get("action"))
             return jsonify({
                 "status": "success",
                 "message": result["message"],
@@ -2067,6 +2200,7 @@ def update_keterlambatan_day_gantt():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("update_keterlambatan_day_gantt", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -2075,10 +2209,14 @@ def get_spk_status():
     ulok = request.args.get('ulok')
     lingkup = request.args.get('lingkup')  # 🔥 tambahan baru
 
+    log_app("get_spk_status", "request received", ulok=ulok, lingkup=lingkup)
+
     if not ulok:
+        log_app("get_spk_status", "missing ulok")
         return jsonify({"error": "Parameter ulok kosong"}), 400
 
     if not lingkup:
+        log_app("get_spk_status", "missing lingkup")
         return jsonify({"error": "Parameter lingkup kosong"}), 400
 
     try:
@@ -2106,6 +2244,7 @@ def get_spk_status():
                 found_index = i
 
         if found_record:
+            log_app("get_spk_status", "found", row_index=found_index)
             return jsonify({
                 "Status": found_record.get("Status"),
                 "RowIndex": found_index,
@@ -2113,16 +2252,19 @@ def get_spk_status():
             }), 200
 
         # Tidak ada SPK untuk kombinasi ULok + Lingkup → boleh submit
+        log_app("get_spk_status", "not found")
         return jsonify(None), 200
         
     except Exception as e:
         traceback.print_exc()
+        log_app("get_spk_status", "error", error=str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/submit_spk', methods=['POST'])
 def submit_spk():
     data = request.get_json()
     if not data:
+        log_app("submit_spk", "invalid json")
         return jsonify({"status": "error", "message": "Invalid JSON data"}), 400
 
     row_index_for_update = data.get("RowIndex")  # Jika revisi
@@ -2131,6 +2273,7 @@ def submit_spk():
     new_row_index = None  # Untuk mode tambah baris
 
     try:
+        log_app("submit_spk", "request received", ulok=data.get("Nomor Ulok"), lingkup=data.get("Lingkup Pekerjaan"))
         if not is_revision:
             incoming_ulok = data.get("Nomor Ulok", "")
             incoming_lingkup = data.get("Lingkup Pekerjaan", "")
@@ -2138,6 +2281,7 @@ def submit_spk():
             is_duplicate = google_provider.check_spk_exists(incoming_ulok, incoming_lingkup)
 
             if is_duplicate:
+                log_app("submit_spk", "duplicate ulok", ulok=incoming_ulok, lingkup=incoming_lingkup)
                 return jsonify({
                     "status": "error",
                     "message": (
@@ -2160,6 +2304,7 @@ def submit_spk():
 
                 if incoming_ulok == existing_ulok and incoming_lingkup == existing_lingkup:
                     if status != config.STATUS.SPK_REJECTED:
+                        log_app("submit_spk", "existing non-rejected", ulok=incoming_ulok, lingkup=incoming_lingkup)
                         return jsonify({
                             "status": "error",
                             "message": (
@@ -2225,9 +2370,11 @@ def submit_spk():
                 data
             )
             row_to_notify = int(row_index_for_update)
+            log_app("submit_spk", "revision update", row=row_to_notify)
         else:
             new_row_index = google_provider.append_to_sheet(data, config.SPK_DATA_SHEET_NAME)
             row_to_notify = new_row_index
+            log_app("submit_spk", "new row added", row=row_to_notify)
 
         # ---- Kirim Email ke Branch Manager ----
         branch_manager_email = google_provider.get_email_by_jabatan(
@@ -2256,6 +2403,8 @@ def submit_spk():
             attachments=[(pdf_filename, pdf_bytes, 'application/pdf')]
         )
 
+        log_app("submit_spk", "email sent", to=branch_manager_email)
+
         return jsonify({"status": "success", "message": "SPK successfully submitted for approval."}), 200
 
     except Exception as e:
@@ -2263,6 +2412,7 @@ def submit_spk():
             google_provider.delete_row(config.SPK_DATA_SHEET_NAME, new_row_index)
 
         traceback.print_exc()
+        log_app("submit_spk", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
     
@@ -2270,13 +2420,17 @@ def submit_spk():
 def reject_form_spk():
     row = request.args.get('row')
     approver = request.args.get('approver')
+
+    log_app("reject_form_spk", "request received", row=row, approver=approver)
     
     if not all([row, approver]):
+        log_app("reject_form_spk", "missing parameters")
         return "Parameter tidak lengkap.", 400
 
     spk_sheet = google_provider.sheet.worksheet(config.SPK_DATA_SHEET_NAME)
     row_data = google_provider.get_row_data_by_sheet(spk_sheet, int(row))
     if not row_data:
+        log_app("reject_form_spk", "row not found", row=row)
         return "Data permintaan tidak ditemukan.", 404
 
     logo_url = url_for('static', filename='Alfamart-Emblem.png', _external=True)
@@ -2307,7 +2461,10 @@ def handle_spk_approval():
     
     logo_url = url_for('static', filename='Alfamart-Emblem.png', _external=True)
 
+    log_app("handle_spk_approval", "request received", action=action, row=row_str, approver=approver)
+
     if not all([action, row_str, approver]):
+        log_app("handle_spk_approval", "missing parameters")
         return render_template('response_page.html', title='Parameter Tidak Lengkap', message='URL tidak lengkap.', logo_url=logo_url), 400
     
     try:
@@ -2316,11 +2473,13 @@ def handle_spk_approval():
         row_data = google_provider.get_row_data_by_sheet(spk_sheet, row_index)
 
         if not row_data:
+            log_app("handle_spk_approval", "row not found", row=row_index)
             return render_template('response_page.html', title='Data Tidak Ditemukan', message='Permintaan ini mungkin sudah dihapus.', logo_url=logo_url)
         
         current_status = row_data.get('Status', '').strip()
         if current_status != config.STATUS.WAITING_FOR_BM_APPROVAL:
             msg = f'Tindakan ini sudah diproses. Status saat ini: <strong>{current_status}</strong>.'
+            log_app("handle_spk_approval", "already processed", current_status=current_status)
             return render_template('response_page.html', title='Tindakan Sudah Diproses', message=msg, logo_url=logo_url)
 
         WIB = timezone(timedelta(hours=7))
@@ -2333,6 +2492,8 @@ def handle_spk_approval():
             google_provider.update_cell_by_sheet(spk_sheet, row_index, 'Status', new_status)
             google_provider.update_cell_by_sheet(spk_sheet, row_index, 'Disetujui Oleh', approver)
             google_provider.update_cell_by_sheet(spk_sheet, row_index, 'Waktu Persetujuan', current_time)
+
+            log_app("handle_spk_approval", "approved", row=row_index, approver=approver)
             
             row_data['Status'] = new_status
             row_data['Disetujui Oleh'] = approver
@@ -2365,18 +2526,18 @@ def handle_spk_approval():
                     config.SUMMARY_OPNAME_SHEET_NAME,
                     opname_data
                 )
-                print(f"Data berhasil diinsert ke Summary Opname untuk Ulok: {nomor_ulok_spk}")
+                log_app("handle_spk_approval", "summary opname inserted", ulok=nomor_ulok_spk)
             except Exception as opname_error:
-                print(f"Warning: Gagal insert ke Summary Opname: {opname_error}")
+                log_app("handle_spk_approval", "summary opname insert failed", error=str(opname_error))
                 # Tidak raise error agar proses approval tetap berjalan
             # --- END INSERT SUMMARY OPNAME ---
             
             # --- UPDATE DATA SPK KE SUMMARY DATA SHEET ---
             try:
                 google_provider.copy_to_summary_sheet(row_data, source_type='SPK')
-                print(f"Data SPK berhasil diupdate ke Summary Data untuk Ulok: {nomor_ulok_spk}")
+                log_app("handle_spk_approval", "summary data updated", ulok=nomor_ulok_spk)
             except Exception as summary_error:
-                print(f"Warning: Gagal update ke Summary Data: {summary_error}")
+                log_app("handle_spk_approval", "summary data update failed", error=str(summary_error))
             # --- END UPDATE SUMMARY DATA ---
             
             # --- INSERT DATA KE SUMMARY SERAH TERIMA SHEET ---
@@ -2389,15 +2550,15 @@ def handle_spk_approval():
                     'kode_ulok': nomor_ulok_spk,
                     'cabang': cabang
                 }
-                print(f"DEBUG: Attempting to insert serah terima data: {serah_terima_data}")
+                log_app("handle_spk_approval", "serah terima insert", ulok=nomor_ulok_spk)
                 google_provider.append_to_dynamic_sheet(
                     config.PENGAWASAN_SPREADSHEET_ID,
                     config.SUMMARY_SERAH_TERIMA_SHEET_NAME,
                     serah_terima_data
                 )
-                print(f"Data berhasil diinsert ke Summary Serah Terima untuk Ulok: {nomor_ulok_spk}")
+                log_app("handle_spk_approval", "serah terima inserted", ulok=nomor_ulok_spk)
             except Exception as serah_terima_error:
-                print(f"Warning: Gagal insert ke Summary Serah Terima: {serah_terima_error}")
+                log_app("handle_spk_approval", "serah terima insert failed", error=str(serah_terima_error))
                 traceback.print_exc()
                 # Tidak raise error agar proses approval tetap berjalan
             # --- END INSERT SUMMARY SERAH TERIMA ---
@@ -2496,22 +2657,27 @@ def handle_spk_approval():
                         f"<p><a href='https://sparta-alfamart.vercel.app' target='_blank' rel='noopener noreferrer'>Input Ulang SPK</a></p>")
                 google_provider.send_email(to=initiator_email, subject=subject, html_body=body)
 
+            log_app("handle_spk_approval", "rejected", row=row_index, approver=approver)
+
             return render_template('response_page.html', title='Permintaan Ditolak', message='Status permintaan telah diperbarui menjadi ditolak.', logo_url=logo_url)
 
     except Exception as e:
         traceback.print_exc()
+        log_app("handle_spk_approval", "error", error=str(e))
         return render_template('response_page.html', title='Error Internal', message=f'Terjadi kesalahan: {str(e)}', logo_url=logo_url), 500
 
 # --- ENDPOINTS UNTUK FORM PENGAWASAN ---
 @app.route('/api/pengawasan/init_data', methods=['GET'])
 def get_pengawasan_init_data():
     cabang = request.args.get('cabang')
+    log_app("get_pengawasan_init_data", "request received", cabang=cabang)
     if not cabang:
+        log_app("get_pengawasan_init_data", "missing cabang")
         return jsonify({"status": "error", "message": "Parameter cabang dibutuhkan."}), 400
     try:
         pic_list, _, _ = google_provider.get_user_info_by_cabang(cabang)
         spk_list = google_provider.get_spk_data_by_cabang(cabang)
-        
+        log_app("get_pengawasan_init_data", "success", pic_count=len(pic_list) if pic_list else 0, spk_count=len(spk_list) if spk_list else 0)
         return jsonify({
             "status": "success",
             "picList": pic_list,
@@ -2519,46 +2685,59 @@ def get_pengawasan_init_data():
         }), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_pengawasan_init_data", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/pengawasan/get_rab_url', methods=['GET'])
 def get_rab_url():
     kode_ulok = request.args.get('kode_ulok')
+    log_app("get_rab_url", "request received", kode_ulok=kode_ulok)
     if not kode_ulok:
+        log_app("get_rab_url", "missing kode_ulok")
         return jsonify({"status": "error", "message": "Parameter kode_ulok dibutuhkan."}), 400
     try:
         rab_url = google_provider.get_rab_url_by_ulok(kode_ulok)
         if rab_url:
+            log_app("get_rab_url", "found")
             return jsonify({"status": "success", "rabUrl": rab_url}), 200
         else:
+            log_app("get_rab_url", "not found")
             return jsonify({"status": "error", "message": "URL RAB tidak ditemukan."}), 404
     except Exception as e:
         traceback.print_exc()
+        log_app("get_rab_url", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/pengawasan/get_spk_url', methods=['GET'])
 def get_spk_url():
     kode_ulok = request.args.get('kode_ulok')
+    log_app("get_spk_url", "request received", kode_ulok=kode_ulok)
     if not kode_ulok:
+        log_app("get_spk_url", "missing kode_ulok")
         return jsonify({"status": "error", "message": "Parameter kode_ulok dibutuhkan."}), 400
     try:
         spk_url = google_provider.get_spk_url_by_ulok(kode_ulok)
         if spk_url:
+            log_app("get_spk_url", "found")
             return jsonify({"status": "success", "spkUrl": spk_url}), 200
         else:
+            log_app("get_spk_url", "not found")
             return jsonify({"status": "error", "message": "URL SPK tidak ditemukan."}), 404
     except Exception as e:
         traceback.print_exc()
+        log_app("get_spk_url", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/pengawasan/submit', methods=['POST'])
 def submit_pengawasan():
     data = request.get_json()
     if not data:
+        log_app("submit_pengawasan", "invalid json")
         return jsonify({"status": "error", "message": "Data JSON tidak valid"}), 400
 
     try:
         form_type = data.get('form_type')
+        log_app("submit_pengawasan", "request received", form_type=form_type, cabang=data.get('cabang'))
         WIB = timezone(timedelta(hours=7))
         timestamp = datetime.datetime.now(WIB)
         
@@ -2571,6 +2750,7 @@ def submit_pengawasan():
                 if pic_email:
                     data['pic_building_support'] = pic_email
                 else:
+                    log_app("submit_pengawasan", "pic not found", kode_ulok=kode_ulok)
                     return jsonify({"status": "error", "message": f"PIC tidak ditemukan untuk Kode Ulok {kode_ulok}. Pastikan proyek ini sudah diinisiasi."}), 404
 
         pic_list, koordinator_info, manager_info = google_provider.get_user_info_by_cabang(cabang)
@@ -2649,6 +2829,7 @@ def submit_pengawasan():
         email_details = get_email_details(form_type, data, user_info)
         
         if not email_details['recipients']:
+            log_app("submit_pengawasan", "no email recipients")
             return jsonify({
                 "status": "error", 
                 "message": "Tidak ada penerima email yang valid. Pastikan PIC Building Support dipilih dan/atau Koordinator/Manajer terdaftar untuk cabang ini."
@@ -2671,6 +2852,8 @@ def submit_pengawasan():
             subject=email_details['subject'],
             html_body=email_html
         )
+
+        log_app("submit_pengawasan", "email sent", recipients=len(email_details['recipients']))
         
         if form_type == 'input_pic' and 'tanggal_mengawas' in data:
             event_date_obj = datetime.datetime.strptime(data['tanggal_mengawas'], '%d %B %Y')
@@ -2685,38 +2868,49 @@ def submit_pengawasan():
 
     except Exception as e:
         traceback.print_exc()
+        log_app("submit_pengawasan", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/pengawasan/active_projects', methods=['GET'])
 def get_active_projects():
     email = request.args.get('email')
+    log_app("get_active_projects", "request received", email=email)
     if not email:
+        log_app("get_active_projects", "missing email")
         return jsonify({"status": "error", "message": "Parameter email dibutuhkan."}), 400
     try:
         active_projects = google_provider.get_active_pengawasan_by_pic(email)
+        log_app("get_active_projects", "success", count=len(active_projects) if active_projects else 0)
         return jsonify({"status": "success", "projects": active_projects}), 200
     except Exception as e:
         traceback.print_exc()
+        log_app("get_active_projects", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/api/user_info_by_email', methods=['GET'])
 def name_dan_cabang_by_email():
     email = request.args.get('email')
+    log_app("name_dan_cabang_by_email", "request received", email=email)
     if not email:
+        log_app("name_dan_cabang_by_email", "missing email")
         return jsonify({"status": "error", "message": "Parameter email dibutuhkan."}), 400
     try:
         name, cabang = google_provider.get_nama_lengkap_dan_cabang_by_email(email)
         if name:
+            log_app("name_dan_cabang_by_email", "found", cabang=cabang)
             return jsonify({"status": "success", "name": name, "cabang": cabang}), 200
         else:
+            log_app("name_dan_cabang_by_email", "not found")
             return jsonify({"status": "error", "message": "Nama tidak ditemukan untuk email tersebut."}), 404
     except Exception as e:
         traceback.print_exc()
+        log_app("name_dan_cabang_by_email", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
+    log_app("health", "service alive")
     return jsonify({"status": "ok", "message": "Service is alive"}), 200
 
 # --- ENDPOINT PROCESS SUMMARY OPNAME ---
@@ -2740,6 +2934,7 @@ def process_summary_opname():
     """
     data = request.get_json()
     if not data:
+        log_app("process_summary_opname", "request body empty")
         return jsonify({"status": "error", "message": "Request body tidak boleh kosong."}), 400
     
     no_ulok = data.get('no_ulok') or data.get('nomor_ulok')
@@ -2748,18 +2943,21 @@ def process_summary_opname():
     
     # Validasi input
     if not no_ulok:
+        log_app("process_summary_opname", "missing no_ulok")
         return jsonify({
             "status": "error",
             "message": "Parameter 'no_ulok' atau 'nomor_ulok' dibutuhkan."
         }), 400
     
     if not lingkup_pekerjaan:
+        log_app("process_summary_opname", "missing lingkup_pekerjaan")
         return jsonify({
             "status": "error",
             "message": "Parameter 'lingkup_pekerjaan' dibutuhkan."
         }), 400
     
     if not jenis_pekerjaan:
+        log_app("process_summary_opname", "missing jenis_pekerjaan")
         return jsonify({
             "status": "error",
             "message": "Parameter 'jenis_pekerjaan' dibutuhkan."
@@ -2767,6 +2965,7 @@ def process_summary_opname():
     
     try:
         result = google_provider.process_summary_opname(no_ulok, lingkup_pekerjaan, jenis_pekerjaan)
+        log_app("process_summary_opname", "processed", status=result.get("status"))
         
         if result.get("status") == "success":
             return jsonify(result), 200
@@ -2775,6 +2974,7 @@ def process_summary_opname():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("process_summary_opname", "error", error=str(e))
         return jsonify({
             "status": "error",
             "message": f"Terjadi kesalahan server: {str(e)}"
@@ -2809,15 +3009,19 @@ def check_status_item_opname():
     """
     no_ulok = request.args.get('no_ulok') or request.args.get('nomor_ulok')
     lingkup_pekerjaan = request.args.get('lingkup_pekerjaan')
+
+    log_app("check_status_item_opname", "request received", ulok=no_ulok, lingkup=lingkup_pekerjaan)
     
     # Validasi input
     if not no_ulok:
+        log_app("check_status_item_opname", "missing no_ulok")
         return jsonify({
             "status": "error",
             "message": "Parameter 'no_ulok' atau 'nomor_ulok' dibutuhkan."
         }), 400
     
     if not lingkup_pekerjaan:
+        log_app("check_status_item_opname", "missing lingkup_pekerjaan")
         return jsonify({
             "status": "error",
             "message": "Parameter 'lingkup_pekerjaan' dibutuhkan."
@@ -2825,6 +3029,7 @@ def check_status_item_opname():
     
     try:
         result = google_provider.check_opname_approval_status(no_ulok, lingkup_pekerjaan)
+        log_app("check_status_item_opname", "checked", status=result.get("status"))
         
         if result.get("status") == "error":
             return jsonify(result), 400
@@ -2833,6 +3038,7 @@ def check_status_item_opname():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("check_status_item_opname", "error", error=str(e))
         return jsonify({
             "status": "error",
             "message": f"Terjadi kesalahan server: {str(e)}"
@@ -2862,6 +3068,7 @@ def opname_locked():
     """
     data = request.get_json()
     if not data:
+        log_app("opname_locked", "request body empty")
         return jsonify({"status": "error", "message": "Request body tidak boleh kosong."}), 400
     
     status_lock = data.get('status')
@@ -2870,18 +3077,21 @@ def opname_locked():
     
     # Validasi input
     if not status_lock or status_lock.lower() != 'locked':
+        log_app("opname_locked", "invalid status", status=status_lock)
         return jsonify({
             "status": "error",
             "message": "Parameter 'status' harus bernilai 'locked'."
         }), 400
     
     if not no_ulok:
+        log_app("opname_locked", "missing ulok")
         return jsonify({
             "status": "error",
             "message": "Parameter 'ulok', 'no_ulok', atau 'nomor_ulok' dibutuhkan."
         }), 400
     
     if not lingkup_pekerjaan:
+        log_app("opname_locked", "missing lingkup_pekerjaan")
         return jsonify({
             "status": "error",
             "message": "Parameter 'lingkup_pekerjaan' atau 'lingkup' dibutuhkan."
@@ -2889,6 +3099,7 @@ def opname_locked():
     
     try:
         result = google_provider.lock_opname(no_ulok, lingkup_pekerjaan)
+        log_app("opname_locked", "lock result", status=result.get("status"))
         
         if result.get("status") == "success":
             return jsonify(result), 200
@@ -2897,6 +3108,7 @@ def opname_locked():
             
     except Exception as e:
         traceback.print_exc()
+        log_app("opname_locked", "error", error=str(e))
         return jsonify({
             "status": "error",
             "message": f"Terjadi kesalahan server: {str(e)}"
@@ -2908,14 +3120,18 @@ def opname_locked():
 def proxy_form():
     # Ambil form ID dari query param atau body
     form_id = request.args.get('form') or (request.json.get('form') if request.is_json else None)
+
+    log_app("proxy_form", "request received", form_id=form_id, method=request.method)
     
     if not form_id:
+        log_app("proxy_form", "missing form id")
         return jsonify({"error": "Invalid or missing form ID"}), 400
         
     form_id = form_id.lower()
     gas_url = GAS_URLS.get(form_id)
     
     if not gas_url:
+        log_app("proxy_form", "invalid form mapping", form_id=form_id)
         return jsonify({"error": "Invalid or missing form ID mapping"}), 400
 
     try:
@@ -2923,6 +3139,7 @@ def proxy_form():
             # Forward semua query params kecuali 'form'
             params = {k: v for k, v in request.args.items() if k != 'form'}
             response = requests.get(gas_url, params=params)
+            log_app("proxy_form", "forwarded GET", status=response.status_code)
             return jsonify(response.json()), response.status_code
 
         elif request.method == 'POST':
@@ -2932,10 +3149,11 @@ def proxy_form():
                 del payload['form']
                 
             response = requests.post(gas_url, json=payload, headers={"Content-Type": "application/json"})
+            log_app("proxy_form", "forwarded POST", status=response.status_code)
             return jsonify(response.json()), response.status_code
 
     except Exception as e:
-        print(f"GAS Proxy error: {str(e)}")
+        log_app("proxy_form", "error", error=str(e))
         return jsonify({"error": "Gagal mengakses Google Apps Script", "details": str(e)}), 500
 
 # --- ENDPOINTS APPROVAL PERPANJANGAN SPK (MIGRASI DARI BACKEND LAMA) ---
@@ -2947,6 +3165,8 @@ def approve_perpanjangan():
         row = request.args.get('row')
         approver = request.args.get('approver')
         ulok = request.args.get('ulok')
+
+        log_app("approve_perpanjangan", "request received", row=row, approver=approver, ulok=ulok)
 
         if not gas_url:
              return render_template("response_page.html", title="Error", message="URL GAS tidak ditemukan.")
@@ -2973,11 +3193,12 @@ def approve_perpanjangan():
         
         # Kirim pakai google_provider
         google_provider.send_email(to=recipients, subject=subject, html_body=body)
+        log_app("approve_perpanjangan", "email sent", recipients=len(recipients) if recipients else 0)
         # 4. Render halaman sukses
         return render_template("response_page.html", title="Berhasil", message=f"Perpanjangan SPK untuk Ulok {ulok} berhasil DISETUJUI.")
 
     except Exception as e:
-        print(f"Error processing approval: {str(e)}")
+        log_app("approve_perpanjangan", "error", error=str(e))
         return render_template("response_page.html", title="Error", message="Terjadi kesalahan server saat memproses persetujuan.")
 
 
@@ -2987,6 +3208,8 @@ def reject_perpanjangan_page():
     row = request.args.get('row')
     approver = request.args.get('approver')
     ulok = request.args.get('ulok')
+
+    log_app("reject_perpanjangan_page", "request received", row=row, approver=approver, ulok=ulok)
     
     # Menggunakan template rejection_form.html yang sudah ada di Sparta Backend
     # Kita perlu sesuaikan parameter yang dikirim agar cocok dengan template
@@ -3018,6 +3241,8 @@ def submit_rejection_perpanjangan():
         ulok = request.form.get('ulok') or request.form.get('item_identifier') # Adaptasi nama field
         reason = request.form.get('reason')
 
+        log_app("submit_rejection_perpanjangan", "request received", row=row, approver=approver, ulok=ulok)
+
         # 1. Panggil GAS untuk proses rejection
         # Gunakan requests, encode params otomatis handle URL encoding
         payload = {
@@ -3046,10 +3271,11 @@ def submit_rejection_perpanjangan():
         recipients = final_data.get('recipients', [])
         
         google_provider.send_email(to=recipients, subject=subject, html_body=body)
+        log_app("submit_rejection_perpanjangan", "email sent", recipients=len(recipients) if recipients else 0)
         return render_template("response_page.html", title="Berhasil", message=f"Perpanjangan SPK untuk Ulok {ulok} berhasil DITOLAK.")
 
     except Exception as e:
-        print(f"Error processing rejection: {str(e)}")
+        log_app("submit_rejection_perpanjangan", "error", error=str(e))
         return render_template("response_page.html", title="Error", message="Gagal memproses penolakan.")
 
 # --- ENDPOINT KIRIM EMAIL GENERAL (MIGRASI DARI BACKEND LAMA) ---
@@ -3058,6 +3284,8 @@ def send_email_general():
     try:
         data = request.get_json()
         form_type = data.get('formType') # Di JS parameternya 'formType' (di body)
+
+        log_app("send_email_general", "request received", form_type=form_type)
         
         # 1. Handle Materai Upload
         if form_type == 'materai_upload':
@@ -3067,6 +3295,7 @@ def send_email_general():
                 emails = [r['email'] for r in manager_recipients if 'email' in r]
                 subject, body = generate_materai_email_body(data, role='manager')
                 google_provider.send_email(to=emails, subject=subject, html_body=body)
+                log_app("send_email_general", "manager email sent", count=len(emails))
                 
             # Kirim ke Koordinator/Lainnya
             other_recipients = data.get('otherRecipients', [])
@@ -3074,6 +3303,7 @@ def send_email_general():
                 emails = [r['email'] for r in other_recipients if 'email' in r]
                 subject, body = generate_materai_email_body(data, role='coordinator')
                 google_provider.send_email(to=emails, subject=subject, html_body=body)
+                log_app("send_email_general", "other email sent", count=len(emails))
 
             return jsonify({"status": "success", "message": "Email materai berhasil dikirim"}), 200
 
@@ -3082,6 +3312,7 @@ def send_email_general():
 
     except Exception as e:
         traceback.print_exc()
+        log_app("send_email_general", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
