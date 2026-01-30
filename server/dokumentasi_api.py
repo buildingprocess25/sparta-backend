@@ -19,7 +19,7 @@ dokumentasi_bp = Blueprint('dokumentasi_bp', __name__)
 # Namun, cara terbaik di Flask pattern ini adalah import instance dari app atau buat baru di sini.
 # Untuk konsistensi dengan sparta-backend, kita buat instance lokal atau import.
 # Asumsi: Kita buat instance baru disini atau gunakan yang ada.
-provider = GoogleServiceProvider() 
+
 
 # Helper date
 def to_ymd(val):
@@ -52,6 +52,7 @@ def drive_file_public_url(file_id):
 
 @dokumentasi_bp.route('/doc/auth/login', methods=['POST'])
 def doc_login():
+    provider = GoogleServiceProvider() 
     data = request.get_json()
     username = (data.get("username") or "").strip()
     password = (data.get("password") or "").strip()
@@ -95,6 +96,7 @@ def doc_login():
 
 @dokumentasi_bp.route('/doc/spk-data', methods=['POST'])
 def doc_spk_data():
+    provider = GoogleServiceProvider() 
     data = request.get_json()
     cabang_filter = (data.get("cabang") or "").strip()
     
@@ -144,6 +146,7 @@ def doc_spk_data():
 
 @dokumentasi_bp.route('/doc/view-photo/<file_id>', methods=['GET'])
 def doc_view_photo(file_id):
+    provider = GoogleServiceProvider() 
     stream = provider.dokumentasi_get_file_stream(file_id)
     if stream:
         return Response(stream.read(), mimetype="image/jpeg")
@@ -151,6 +154,7 @@ def doc_view_photo(file_id):
 
 @dokumentasi_bp.route('/doc/save-temp', methods=['POST'])
 def doc_save_temp():
+    provider = GoogleServiceProvider() 
     data = request.get_json()
     nomor_ulok = (data.get("nomorUlok") or "").strip()
     if not nomor_ulok: return jsonify({"ok": False, "error": "nomorUlok required"}), 400
@@ -292,6 +296,7 @@ def doc_save_temp():
 
 @dokumentasi_bp.route('/doc/get-temp', methods=['POST'])
 def doc_get_temp():
+    provider = GoogleServiceProvider() 
     data = request.get_json()
     nomor_ulok = (data.get("nomorUlok") or "").strip()
     
@@ -341,6 +346,7 @@ def doc_get_temp():
 
 @dokumentasi_bp.route('/doc/cek-status', methods=['POST'])
 def doc_cek_status():
+    provider = GoogleServiceProvider() 
     data = request.get_json()
     ulok = (data.get("nomorUlok") or "").strip()
     
@@ -367,6 +373,7 @@ def doc_save_toko():
     Menyimpan data dokumentasi final ke sheet 'dokumentasi_bangunan'.
     Menerima data toko, foto-foto, dan PDF base64 untuk diupload ke Drive.
     """
+    provider = GoogleServiceProvider() 
     data = request.get_json()
     nomor_ulok = (data.get("nomorUlok") or "").strip()
     if not nomor_ulok:
@@ -524,6 +531,7 @@ def doc_send_email():
     """
     Mengirim email notifikasi dengan PDF dokumentasi ke validator.
     """
+    provider = GoogleServiceProvider() 
     data = request.get_json()
     nomor_ulok = (data.get("nomorUlok") or "").strip()
     cabang = (data.get("cabang") or "").strip()
@@ -680,6 +688,7 @@ def send_email_with_attachment(gmail_service, to_email, subject, html_body, atta
     """
     Helper function untuk mengirim email dengan attachment opsional.
     """
+    
     try:
         message = MIMEMultipart()
         message['to'] = to_email
@@ -719,6 +728,7 @@ def doc_validate():
     Endpoint untuk validasi dokumentasi bangunan.
     Dipanggil dari link di email validator.
     """
+    provider = GoogleServiceProvider() 
     ulok = request.args.get('ulok', '').strip()
     status = request.args.get('status', '').strip().upper()
     catatan = request.args.get('catatan', '').strip()
