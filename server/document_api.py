@@ -44,6 +44,13 @@ def decode_base64_maybe_with_prefix(b64_str: str) -> bytes:
     return base64.b64decode(cleaned, validate=False)
 
 
+# --- LOGGING HELPER ---
+def log_doc(func: str, message: str, **kwargs):
+    ts = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+    extra = " | ".join(f"{k}={v}" for k, v in kwargs.items()) if kwargs else ""
+    print(f"[DOC][{func}] {ts} - {message}{' | ' + extra if extra else ''}")
+
+
 # --- ROUTES ---
 
 @doc_bp.route('/api/doc/login', methods=['POST'])
@@ -53,7 +60,10 @@ def login_doc():
     username = data.get("username", "").strip().lower()
     password = data.get("password", "").strip().upper()
 
+    log_doc("login_doc", "request received", username=username)
+
     if not username or not password:
+        log_doc("login_doc", "missing credentials", has_username=bool(username), has_password=bool(password))
         return jsonify({"detail": "Username dan password wajib diisi"}), 400
 
     try:
@@ -77,6 +87,7 @@ def login_doc():
 
             if email == username and password == cabang:
                 if jabatan in allowed_roles:
+                    log_doc("login_doc", "authenticated", email=email, cabang=cabang, jabatan=jabatan)
                     return jsonify({
                         "ok": True,
                         "user": {
@@ -87,11 +98,14 @@ def login_doc():
                         },
                     })
                 else:
+                    log_doc("login_doc", "forbidden role", email=email, cabang=cabang, jabatan=jabatan)
                     return jsonify({"detail": "Jabatan tidak diizinkan"}), 403
 
+        log_doc("login_doc", "invalid credentials", username=username)
         return jsonify({"detail": "Username atau password salah"}), 401
 
     except Exception as e:
+        log_doc("login_doc", "error", error=str(e))
         traceback.print_exc()
         return jsonify({"detail": str(e)}), 500
 
@@ -105,6 +119,8 @@ def list_documents():
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
         ws = provider.doc_sheet.worksheet(config.DOC_SHEET_NAME)
         data = ws.get_all_records()
+
+        log_doc("list_documents", "fetched records", total=len(data), cabang_filter=cabang or "-")
 
         # Normalisasi kolom
         normalized_data = []
@@ -120,9 +136,11 @@ def list_documents():
         else:
             filtered = normalized_data
 
+        log_doc("list_documents", "returning items", count=len(filtered))
         return jsonify({"ok": True, "items": filtered})
 
     except Exception as e:
+        log_doc("list_documents", "error", error=str(e))
         return jsonify({"detail": f"Gagal membaca spreadsheet: {e}"}), 500
 
 
@@ -147,7 +165,18 @@ def save_document_base64():
         files = payload.get("files", [])
         email = payload.get("email", "")
 
+        log_doc(
+            "save_document_base64",
+            "request received",
+            kode_toko=kode_toko,
+            nama_toko=nama_toko,
+            cabang=cabang,
+            files=len(files),
+            email=email,
+        )
+
         if not all([kode_toko, nama_toko, cabang]):
+            log_doc("save_document_base64", "missing required fields")
             return jsonify({"detail": "Data toko belum lengkap."}), 400
 
         # 1. Buka Sheet
@@ -156,15 +185,19 @@ def save_document_base64():
 
         # 2. Validasi Duplikat
         existing_records = ws.get_all_records()
+        log_doc("save_document_base64", "existing records fetched", count=len(existing_records))
         for row in existing_records:
             existing_code = str(row.get("kode_toko") or row.get("KodeToko") or "").strip().upper()
             if existing_code == kode_toko.strip().upper():
+                log_doc("save_document_base64", "duplicate kode_toko", kode_toko=kode_toko)
                 return jsonify({"detail": f"Kode toko '{kode_toko}' sudah terdaftar."}), 400
 
         # 3. Upload ke Drive
         cabang_folder = provider.get_or_create_folder(cabang, config.DOC_DRIVE_ROOT_ID)
         toko_folder_name = f"{kode_toko}_{nama_toko}".replace("/", "-")
         toko_folder = provider.get_or_create_folder(toko_folder_name, cabang_folder)
+
+        log_doc("save_document_base64", "folders prepared", cabang_folder=cabang_folder, toko_folder=toko_folder)
 
         category_folders = {}
         file_links = []
@@ -200,7 +233,7 @@ def save_document_base64():
                     file_links.append(f"{category}|{filename}|{direct_link}")
 
             except Exception as e:
-                print(f"Gagal upload {filename}: {e}")
+                log_doc("save_document_base64", "upload failed", filename=filename, category=category, error=str(e))
 
         # 4. Simpan ke Sheet
         jakarta_tz = pytz.timezone('Asia/Jakarta')
@@ -213,6 +246,14 @@ def save_document_base64():
             email  # last_edit
         ])
 
+        log_doc(
+            "save_document_base64",
+            "saved",
+            uploaded=len(file_links),
+            folder_link=f"https://drive.google.com/drive/folders/{toko_folder}",
+            last_edit=email,
+        )
+
         return jsonify({
             "ok": True,
             "message": f"{len(file_links)} file berhasil diunggah",
@@ -221,6 +262,7 @@ def save_document_base64():
         })
 
     except Exception as e:
+        log_doc("save_document_base64", "error", error=str(e))
         traceback.print_exc()
         return jsonify({"detail": f"Gagal menyimpan: {e}"}), 500
 
@@ -232,6 +274,14 @@ def update_document(kode_toko):
         data = request.get_json()
         files = data.get("files", [])
         email = data.get("email", "")
+
+        log_doc(
+            "update_document",
+            "request received",
+            kode_toko=kode_toko,
+            files=len(files),
+            email=email,
+        )
         
         # Capture timestamp saat update dimulai (Jakarta timezone)
         jakarta_tz = pytz.timezone('Asia/Jakarta')
@@ -242,17 +292,21 @@ def update_document(kode_toko):
         ws = provider.doc_sheet.worksheet(config.DOC_SHEET_NAME)
         records = ws.get_all_records()
 
+        log_doc("update_document", "records fetched", total=len(records))
+
         # Cari baris
         row_index = next((i + 2 for i, r in enumerate(records) 
                           if str(r.get("kode_toko", "")).strip() == str(kode_toko).strip()), None)
         
         if not row_index:
+            log_doc("update_document", "row not found", kode_toko=kode_toko)
             return jsonify({"detail": "Data tidak ditemukan"}), 404
 
         # Ambil data lama
         old_data = records[row_index - 2]
         old_folder_link = old_data.get("folder_link")
         if not old_folder_link or "folders/" not in old_folder_link:
+            log_doc("update_document", "invalid drive folder", folder_link=old_folder_link)
             return jsonify({"detail": "Folder Drive toko tidak valid"}), 400
         
         toko_folder_id = old_folder_link.split("folders/")[-1]
@@ -295,7 +349,7 @@ def update_document(kode_toko):
                         "category": cat_name
                     })
         except Exception as e:
-            print(f"⚠️ Error membaca folder Drive: {e}")
+            log_doc("update_document", "error reading drive folders", error=str(e))
 
         # Pisahkan file berdasarkan tipe:
         # 1. files_to_delete: file dengan flag deleted=true
@@ -321,6 +375,14 @@ def update_document(kode_toko):
                 # File lama yang harus dipertahankan
                 files_to_keep_keys.add((category, filename))
 
+        log_doc(
+            "update_document",
+            "files classified",
+            to_delete=len(files_to_delete),
+            to_upload=len(files_to_upload),
+            to_keep=len(files_to_keep_keys),
+        )
+
         # Eksekusi hapus file yang ditandai deleted=true
         for del_file in files_to_delete:
             # Cari file di Drive berdasarkan category dan filename
@@ -332,9 +394,20 @@ def update_document(kode_toko):
             if drive_file:
                 try:
                     provider.doc_drive_service.files().delete(fileId=drive_file["id"]).execute()
-                    print(f"🗑️ Hapus file di Drive: {drive_file['name']} (Kategori: {drive_file['category']})")
+                    log_doc(
+                        "update_document",
+                        "deleted from drive",
+                        filename=drive_file['name'],
+                        category=drive_file['category'],
+                    )
                 except Exception as del_err:
-                    print(f"⚠️ Gagal hapus file {drive_file['name']}: {del_err}")
+                    log_doc(
+                        "update_document",
+                        "delete failed",
+                        filename=drive_file['name'],
+                        category=drive_file['category'],
+                        error=str(del_err),
+                    )
         
         # ==============================================================================
         # SELESAI IMPLEMENTASI DELETE LOGIC
@@ -371,9 +444,9 @@ def update_document(kode_toko):
             if old_drive_file:
                 try:
                     provider.doc_drive_service.files().delete(fileId=old_drive_file["id"]).execute()
-                    print(f"🔄 Replace file di Drive: {filename}")
+                    log_doc("update_document", "replace existing file", filename=filename, category=category)
                 except Exception as e:
-                    print(f"⚠️ Gagal hapus file lama untuk replace: {e}")
+                    log_doc("update_document", "replace delete failed", filename=filename, category=category, error=str(e))
             
             raw = decode_base64_maybe_with_prefix(f["data"])
             mime = guess_mime(filename, f.get("type"))
@@ -386,6 +459,13 @@ def update_document(kode_toko):
             direct = f"https://drive.google.com/uc?export=view&id={fid}" if fid else ""
             
             new_file_links.append(f"{category}|{filename}|{direct}")
+
+        log_doc(
+            "update_document",
+            "upload completed",
+            uploaded=len(files_to_upload),
+            kept=len(new_file_links) - len(files_to_upload),
+        )
 
         # Update Sheet
         # Hati-hati urutan kolom harus sama persis dengan sheet
@@ -409,9 +489,19 @@ def update_document(kode_toko):
             email  # last_edit
         ]])
 
+        log_doc(
+            "update_document",
+            "sheet updated",
+            kode_toko=kode_toko,
+            row=row_index,
+            updated_at=update_timestamp,
+            last_edit=email,
+        )
+
         return jsonify({"ok": True, "message": "Berhasil update", "last_edit": email, "updated_at": update_timestamp})
 
     except Exception as e:
+        log_doc("update_document", "error", error=str(e))
         traceback.print_exc()
         return jsonify({"detail": str(e)}), 500
 
@@ -423,10 +513,13 @@ def delete_document(kode_toko):
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
         ws = doc_sheet.worksheet(config.DOC_SHEET_NAME)
         records = ws.get_all_records()
+
+        log_doc("delete_document", "request received", kode_toko=kode_toko, total_records=len(records))
         
         row_index = next((i + 2 for i, r in enumerate(records) if str(r.get("kode_toko", "")).strip() == str(kode_toko).strip()), None)
         
         if not row_index:
+            log_doc("delete_document", "row not found", kode_toko=kode_toko)
             return jsonify({"detail": "Data tidak ditemukan"}), 404
             
         # Hapus folder di Drive
@@ -434,10 +527,13 @@ def delete_document(kode_toko):
         if folder_link and "folders/" in folder_link:
             folder_id = folder_link.split("folders/")[-1]
             provider.delete_drive_file(folder_id)
+            log_doc("delete_document", "drive folder deleted", folder_id=folder_id)
 
         ws.delete_rows(row_index)
+        log_doc("delete_document", "row deleted", row=row_index)
         return jsonify({"ok": True, "message": "Dokumen dihapus"})
     except Exception as e:
+        log_doc("delete_document", "error", error=str(e))
         return jsonify({"detail": str(e)}), 500
 
 @doc_bp.route('/api/doc/detail/<kode_toko>', methods=['GET'])
@@ -447,12 +543,16 @@ def get_document_detail(kode_toko):
         doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
         ws = doc_sheet.worksheet(config.DOC_SHEET_NAME)
         records = ws.get_all_records()
+
+        log_doc("get_document_detail", "records fetched", total=len(records), kode_toko=kode_toko)
         
         found = next((r for r in records if str(r.get("kode_toko", "")).strip() == str(kode_toko).strip()), None)
         
         if not found:
+            log_doc("get_document_detail", "not found", kode_toko=kode_toko)
             return jsonify({"detail": "Data tidak ditemukan"}), 404
-            
+        log_doc("get_document_detail", "found", kode_toko=kode_toko)
         return jsonify({"ok": True, "data": found})
     except Exception as e:
+        log_doc("get_document_detail", "error", error=str(e))
         return jsonify({"detail": str(e)}), 500
