@@ -3601,62 +3601,34 @@ class GoogleServiceProvider:
             return False
 
     def dokumentasi_upload_image(self, base64_data, filename):
-        """
-        Upload gambar ke Drive menggunakan Akun Utama (self.drive_service).
-        Digunakan untuk mengatasi masalah Administrator Workspace yang memblokir
-        Service Account untuk menulis ke folder pengguna.
-        """
+        """Upload gambar ke Drive menggunakan Service Account."""
         try:
-            # 1. Pilih Service Drive: Gunakan akun User (Sparta) sebagai prioritas utama
-            # Ini menggunakan kredensial dari 'token.json' (akun Anda)
-            service_to_use = self.drive_service
-            
-            if not service_to_use:
-                print("⚠️ Service Drive Utama (User) belum siap. Mencoba fallback...")
-                # Fallback ke Service Account hanya jika User Token mati/hilang
-                if self.dokumentasi_drive:
-                    service_to_use = self.dokumentasi_drive
-                else:
-                    print("❌ Tidak ada service drive yang tersedia.")
-                    return None
+            if not self.dokumentasi_drive: 
+                print("⚠️ Service Drive Dokumentasi belum siap.")
+                return None
 
             folder_id = config.DOC_FOLDER_ID
             
-            # 2. Cek & Hapus file lama jika ada (untuk menghindari duplikasi nama)
-            # Kita cari file dengan nama yang sama di folder target
+            # 1. Hapus file lama jika ada (Logic overwrite)
             query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
-            try:
-                results = service_to_use.files().list(q=query, fields="files(id)").execute()
-                for f in results.get('files', []):
-                    try:
-                        service_to_use.files().delete(fileId=f['id']).execute()
-                        print(f"♻️ File lama dihapus: {f['id']}")
-                    except Exception as del_err:
-                        print(f"⚠️ Gagal hapus file lama: {del_err}")
-            except Exception as search_err:
-                print(f"⚠️ Warning saat mencari file lama: {search_err}")
+            results = self.dokumentasi_drive.files().list(q=query, fields="files(id)").execute()
+            for f in results.get('files', []):
+                try:
+                    self.dokumentasi_drive.files().delete(fileId=f['id']).execute()
+                except: pass
 
-            # 3. Proses Base64 Image
-            if "," in base64_data:
-                clean_b64 = base64_data.split(",")[1]
-            else:
-                clean_b64 = base64_data
-                
+            # 2. Upload baru
+            clean_b64 = base64_data.split(",")[-1]
             file_bytes = base64.b64decode(clean_b64)
             
-            # 4. Upload File Baru
             file_metadata = {'name': filename, 'parents': [folder_id]}
             media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype='image/jpeg')
             
-            file = service_to_use.files().create(
-                body=file_metadata, 
-                media_body=media, 
-                fields='id'
+            file = self.dokumentasi_drive.files().create(
+                body=file_metadata, media_body=media, fields='id'
             ).execute()
             
-            print(f"✅ Upload berhasil via User Account. File ID: {file.get('id')}")
             return file.get('id')
-
         except Exception as e:
             print(f"❌ Error uploading doc image: {e}")
             return None
