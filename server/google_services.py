@@ -3634,21 +3634,35 @@ class GoogleServiceProvider:
             return None
 
     def dokumentasi_get_file_stream(self, file_id):
-        """Stream file dari Drive Service Account."""
-        try:
-            if not self.dokumentasi_drive: return None
-            
-            request = self.dokumentasi_drive.files().get_media(fileId=file_id)
-            fh = io.BytesIO()
-            downloader = MediaIoBaseDownload(fh, request)
-            done = False
-            while done is False:
-                status, done = downloader.next_chunk()
-            fh.seek(0)
-            return fh
-        except Exception as e:
-            print(f"❌ Error streaming file {file_id}: {e}")
-            return None
+        """Stream file dari Drive. Coba Service Account dulu, fallback ke OAuth user."""
+        services = []
+        if self.dokumentasi_drive:
+            services.append(("dokumentasi_service_account", self.dokumentasi_drive))
+        if self.doc_drive_service:
+            services.append(("doc_oauth_user", self.doc_drive_service))
+        if self.drive_service:
+            services.append(("sparta_oauth_user", self.drive_service))
+
+        for label, service in services:
+            try:
+                request = service.files().get_media(fileId=file_id)
+                fh = io.BytesIO()
+                downloader = MediaIoBaseDownload(fh, request)
+                done = False
+                while done is False:
+                    status, done = downloader.next_chunk()
+                fh.seek(0)
+                if fh.getbuffer().nbytes > 0:
+                    return fh
+            except HttpError as e:
+                # File tidak ditemukan di service ini, lanjutkan fallback
+                print(f"⚠️ {label} tidak menemukan file {file_id}: {e}")
+                continue
+            except Exception as e:
+                print(f"❌ Error streaming file {file_id} via {label}: {e}")
+                continue
+
+        return None
 
     # Helper untuk konversi angka ke huruf kolom (jika belum ada di class Anda)
     def _get_col_letter(self, col_num):
