@@ -17,9 +17,9 @@ DOC_SHEET_NAME = os.getenv("SHEET_NAME", "penyimpanan_dokumen")
 DOC_DRIVE_ROOT_ID = os.getenv("DRIVE_ROOT_ID", "14hjuP33ez1v1WDxkTi7A3k-XfKOZKVTc") # ID Folder Root Drive Penyimpanan
 
 # dokumentasi bangunan
-DOC_SHEET_ID = os.getenv("DOC_SHEET_ID")
-DOC_FOLDER_ID = os.getenv("DOC_FOLDER_ID")
-DOC_DEFAULT_PHOTO_ID = os.getenv("DOC_DEFAULT_PHOTO_ID")
+DOC_SHEET_ID = os.getenv("DOC_SHEET_ID", "1LA1TlhgltT2bqSN3H-LYasq9PtInVlqq98VPru8txoo")
+DOC_FOLDER_ID = os.getenv("DOC_FOLDER_ID", "1ZTHC7vvvKOIejATqAYeluxfVDaGax1cd")
+DOC_DEFAULT_PHOTO_ID = os.getenv("DOC_DEFAULT_PHOTO_ID", "14x-tF0TDAZA9t4lbk6GrHXL8RccxxnjQ")
 # Tambahkan ini:
 DOC_SERVICE_ACCOUNT_FILE = "service_account_doc.json"
 
