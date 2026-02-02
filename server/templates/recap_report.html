@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>Rekapitulasi RAB</title>
@@ -7,6 +8,7 @@
         @page {
             size: A4;
             margin: 2.5cm 2cm;
+
             @bottom-right {
                 content: counter(page) "/" counter(pages);
                 font-family: Arial, sans-serif;
@@ -14,29 +16,138 @@
                 color: #000;
             }
         }
-        body { font-family: Arial, sans-serif; color: #333; font-size: 10px; }
-        .container { width: 100%; }
-        .pdf-header { text-align: center; margin-bottom: 20px; }
-        .pdf-header .logo { max-height: 50px; width: auto; }
-        .header-company p { margin: 0; font-size: 12px; font-weight: bold; }
-        .header-title { text-align: center; margin: 20px 0; }
-        .header-title h1 { font-size: 18px; margin: 0; text-decoration: underline; }
-        .section-info table { width: 100%; font-size: 10px; border-collapse: collapse; }
-        .section-info td { padding: 2px 0; }
-        .price-table { width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 10px; }
-        .price-table th, .price-table td { border: 1px solid #333; padding: 4px; text-align: center; }
-        .price-table th { background-color: #e0ffff; font-weight: bold; }
-        .price-table .text-left { text-align: left; }
-        .price-table .text-right { text-align: right; }
-        .price-table .category-header { font-size: 12px; font-weight: bold; border-bottom: 1px solid #333; padding: 8px 0 4px 0; margin-top: 20px; margin-bottom: 10px; }
-        .price-table .sub-total-row td { font-weight: bold; background-color: #f2f2f2; }
-        .grand-total-table { margin-top: 20px; width: 50%; float: right; border: none; font-size: 10px; }
-        .grand-total-table td { border: 1px solid #ddd; padding: 4px; text-align: right; font-weight: bold; }
-        .grand-total-table td:first-child { border: none; text-align: right; }
-        .grand-total-table .total-amount-cell { background-color: #e0ffff; }
-        .signatures { display: table; width: 100%; margin-top: 30px; text-align: center; page-break-inside: avoid; }
-        .signature-box { display: table-cell; width: 33%; vertical-align: top; }
-        .signature-box .title { font-size: 11px; margin-bottom: 5px; }
+
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            font-size: 10px;
+        }
+
+        .container {
+            width: 100%;
+        }
+
+        .pdf-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .pdf-header .logo {
+            max-height: 50px;
+            width: auto;
+        }
+
+        .header-company p {
+            margin: 0;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .header-title {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .header-title h1 {
+            font-size: 18px;
+            margin: 0;
+            text-decoration: underline;
+        }
+
+        .section-info table {
+            width: 100%;
+            font-size: 10px;
+            border-collapse: collapse;
+        }
+
+        .section-info td {
+            padding: 2px 0;
+        }
+
+        .price-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9px;
+            margin-top: 10px;
+        }
+
+        .price-table th,
+        .price-table td {
+            border: 1px solid #333;
+            padding: 4px;
+            text-align: center;
+        }
+
+        .price-table th {
+            background-color: #e0ffff;
+            font-weight: bold;
+        }
+
+        .price-table .text-left {
+            text-align: left;
+        }
+
+        .price-table .text-right {
+            text-align: right;
+        }
+
+        .price-table .category-header {
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            padding: 8px 0 4px 0;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .price-table .sub-total-row td {
+            font-weight: bold;
+            background-color: #f2f2f2;
+        }
+
+        .grand-total-table {
+            margin-top: 20px;
+            width: 50%;
+            float: right;
+            border: none;
+            font-size: 10px;
+        }
+
+        .grand-total-table td {
+            border: 1px solid #ddd;
+            padding: 4px;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .grand-total-table td:first-child {
+            border: none;
+            text-align: right;
+        }
+
+        .grand-total-table .total-amount-cell {
+            background-color: #e0ffff;
+        }
+
+        .signatures {
+            display: table;
+            width: 100%;
+            margin-top: 30px;
+            text-align: center;
+            page-break-inside: avoid;
+        }
+
+        .signature-box {
+            display: table-cell;
+            width: 33%;
+            vertical-align: top;
+        }
+
+        .signature-box .title {
+            font-size: 11px;
+            margin-bottom: 5px;
+        }
+
         .signature-content {
             height: 65px;
             display: flex;
@@ -44,44 +155,85 @@
             justify-content: center;
             position: relative;
         }
+
         .approval-details {
             font-size: 9px;
             line-height: 1.4;
             color: #555;
         }
+
         .signature-line {
             position: absolute;
             bottom: 0;
             left: 10%;
-            width: 80%; 
-            height: 1px; 
+            width: 80%;
+            height: 1px;
             background-color: #333;
         }
-        .signature-box .jabatan { margin-top: 5px; font-size: 11px; }
+
+        .signature-box .jabatan {
+            margin-top: 5px;
+            font-size: 11px;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header-company">
             {% if nama_pt %}
-                <p>{{ nama_pt }}</p>
-                {% else %}
-                    <p>NAMA PT. KONTRAKTOR TIDAK ADA</p>
+            <p>{{ nama_pt }}</p>
+            {% else %}
+            <p>NAMA PT. KONTRAKTOR TIDAK ADA</p>
             {% endif %}
             <p>Cabang {{ data['Cabang'] }}</p>
         </div>
         <div class="header-title">
             <h1>REKAPITULASI RENCANA ANGGARAN BIAYA</h1>
         </div>
-        
+
         <div class="section-info">
             <table style="width:100%; border-collapse:collapse;">
-                <tr><td style="width:30%;">NOMOR ULOK</td><td style="width:2%;">:</td><td>{{ data['Nomor Ulok'] or '' }}</td></tr>
-                <tr><td>NAMA TOKO</td><td>:</td><td>{{ data['nama_toko'] or '' }}</td></tr>
-                <tr><td>PROYEK</td><td>:</td><td>{{ data['Proyek'] or '' }}</td></tr>
-                <tr><td>ALAMAT TOKO</td><td>:</td><td>{{ data['Alamat'] or '' }}</td></tr>
-                <tr><td>LINGKUP PEKERJAAN</td><td>:</td><td>{{ data['Lingkup_Pekerjaan'] or '' }}</td></tr>
-                <tr><td>TANGGAL PENGAJUAN</td><td>:</td><td>{{ tanggal_pengajuan }}</td></tr>
+                <tr>
+                    <td style="width:30%;">NOMOR ULOK</td>
+                    <td style="width:2%;">:</td>
+                    <td>{{ data['Nomor Ulok'] or '' }}</td>
+                </tr>
+                <tr>
+                    <td>NAMA TOKO</td>
+                    <td>:</td>
+                    <td>{{ data['nama_toko'] or '' }}</td>
+                </tr>
+                <tr>
+                    <td>PROYEK</td>
+                    <td>:</td>
+                    <td>{{ data['Proyek'] or '' }}</td>
+                </tr>
+                <tr>
+                    <td>ALAMAT TOKO</td>
+                    <td>:</td>
+                    <td>{{ data['Alamat'] or '' }}</td>
+                </tr>
+                <tr>
+                    <td>LINGKUP PEKERJAAN</td>
+                    <td>:</td>
+                    <td>{{ data['Lingkup_Pekerjaan'] or '' }}</td>
+                </tr>
+                <tr>
+                    <td>DURASI PEKERJAAN</td>
+                    <td>:</td>
+                    <td>{{ data['Durasi_Pekerjaan'] or '' }}</td>
+                </tr>
+                <tr>
+                    <td>KATEGORI LOKASI</td>
+                    <td>:</td>
+                    <td>{{ data['Kategori_Lokasi'] or '' }} m²</td>
+                </tr>
+                <tr>
+                    <td>TANGGAL PENGAJUAN</td>
+                    <td>:</td>
+                    <td>{{ tanggal_pengajuan }}</td>
+                </tr>
             </table>
         </div>
 
@@ -113,10 +265,22 @@
 
         <table class="grand-total-table">
             <tbody>
-                <tr><td>TOTAL (Rp)</td><td class="total-amount-cell">{{ grand_total_formatted }}</td></tr>
-                <tr><td>PEMBULATAN (Rp)</td><td class="total-amount-cell">{{ pembulatan_formatted }}</td></tr>
-                <tr><td>PPN 11% (Rp)</td><td class="total-amount-cell">{{ ppn_formatted }}</td></tr>
-                <tr><td>GRAND TOTAL (Rp)</td><td class="total-amount-cell">{{ final_total_formatted }}</td></tr>
+                <tr>
+                    <td>TOTAL (Rp)</td>
+                    <td class="total-amount-cell">{{ grand_total_formatted }}</td>
+                </tr>
+                <tr>
+                    <td>PEMBULATAN (Rp)</td>
+                    <td class="total-amount-cell">{{ pembulatan_formatted }}</td>
+                </tr>
+                <tr>
+                    <td>PPN 11% (Rp)</td>
+                    <td class="total-amount-cell">{{ ppn_formatted }}</td>
+                </tr>
+                <tr>
+                    <td>GRAND TOTAL (Rp)</td>
+                    <td class="total-amount-cell">{{ final_total_formatted }}</td>
+                </tr>
             </tbody>
         </table>
         <div style="clear: both;"></div>
@@ -149,4 +313,5 @@
         </div>
     </div>
 </body>
+
 </html>
