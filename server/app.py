@@ -440,6 +440,8 @@ def filter_user_log_login():
                 "date": date,
                 "email": email,
                 "count": data["count"],
+                "cabang": cabang_raw,
+                "status": status,
                 "timestamp": data["latest_ts"].isoformat()
             }
             for (date, email), data in counts.items()
