@@ -432,7 +432,9 @@ def filter_user_log_login():
             {
                 "date": date,
                 "email": email,
-                "count": count
+                "count": count,
+                "status": status,
+                "cabang": cabang_raw
             }
             for (date, email), count in counts.items()
         ]
