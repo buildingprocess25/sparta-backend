@@ -718,7 +718,7 @@ def submit_rab_kedua():
             data.get('Email_Pembuat')
         )
 
-        if not is_revising and google_provider.check_ulok_exists(nomor_ulok_raw, lingkup_pekerjaan):
+        if not is_revising and google_provider.check_ulok_exists_IL(nomor_ulok_raw, lingkup_pekerjaan):
             log_app("submit_rab_kedua", "duplicate ulok", ulok=nomor_ulok_raw, lingkup=lingkup_pekerjaan)
             return jsonify({
                 "status": "error",

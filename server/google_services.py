@@ -2489,6 +2489,58 @@ class GoogleServiceProvider:
         except Exception as e:
             print(f"Error checking for existing RAB ulok: {e}")
             return False
+        
+    def check_ulok_exists_IL(self, nomor_ulok_to_check, lingkup_pekerjaan_to_check):
+        """
+        Mengecek apakah RAB 2 sudah ada dan sedang AKTIF (Waiting atau Approved).
+        Jika fungsi ini return True, berarti user TIDAK BOLEH submit (Duplicate).
+        """
+        try:
+            target_ulok = self._normalize_ulok(nomor_ulok_to_check)
+            target_lingkup = self._normalize_lingkup(lingkup_pekerjaan_to_check)
+
+            # Buka Spreadsheet RAB 2
+            spreadsheet = self.gspread_client.open_by_key(config.SPREADSHEET_ID_RAB_2)
+            worksheet = spreadsheet.worksheet(config.DATA_ENTRY_SHEET_NAME_RAB_2)
+            
+            # Ambil semua data
+            all_records = worksheet.get_all_records()
+            
+            
+            for record in all_records:
+                status = str(record.get(config.COLUMN_NAMES.STATUS, "")).strip()
+                
+                # Cek hanya status AKTIF.
+                # Jika status DITOLAK, fungsi ini akan mengabaikannya (return False untuk row itu),
+                # sehingga kode di app.py bisa lanjut mengecek apakah ini Revisi.
+                active_statuses = [
+                    config.STATUS.WAITING_FOR_COORDINATOR, 
+                    config.STATUS.WAITING_FOR_MANAGER, 
+                    config.STATUS.APPROVED
+                ]
+
+                if status in active_statuses:
+                    # Ambil data dari row & Normalisasi
+                    rec_ulok_raw = str(record.get(config.COLUMN_NAMES.LOKASI, ""))
+                    
+                    # Robust: Cek key 'Lingkup_Pekerjaan' (config) DAN 'Lingkup Pekerjaan' (header spasi)
+                    rec_lingkup_raw = record.get(
+                        config.COLUMN_NAMES.LINGKUP_PEKERJAAN, 
+                        record.get('Lingkup Pekerjaan', '')
+                    )
+
+                    rec_ulok = self._normalize_ulok(rec_ulok_raw)
+                    rec_lingkup = self._normalize_lingkup(rec_lingkup_raw)
+
+                    # Bandingkan data yang sudah bersih
+                    if rec_ulok == target_ulok and rec_lingkup == target_lingkup:
+                        print(f"Duplikasi RAB Ditemukan: {target_ulok} ({target_lingkup})")
+                        return True
+                        
+            return False
+        except Exception as e:
+            print(f"Error checking for existing RAB ulok: {e}")
+            return False
 
     def check_spk_exists(self, nomor_ulok_to_check, lingkup_pekerjaan_to_check):
         """
