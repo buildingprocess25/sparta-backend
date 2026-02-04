@@ -373,7 +373,7 @@ def filter_user_log_login():
     Filter Log Login dari Spreadsheet utama dengan kriteria:
     - Timestamp di antara 2026-01-30 sampai hari ini (WIB)
     - Status Login == Success
-    - Username (Email) unik per tanggal (1 email per tanggal)
+    Hasil menampilkan kalkulasi jumlah login per Username (Email) per tanggal.
     """
     log_app("filter_user_log_login", "request received")
 
@@ -385,8 +385,7 @@ def filter_user_log_login():
         worksheet = spreadsheet.worksheet("Log Login")
         records = worksheet.get_all_records()
 
-        filtered = []
-        seen = set()
+        counts = {}
 
         for record in records:
             status_raw = (
@@ -427,26 +426,22 @@ def filter_user_log_login():
                 continue
 
             key = (ts_date.isoformat(), email)
-            if key in seen:
-                continue
-            seen.add(key)
+            counts[key] = counts.get(key, 0) + 1
 
-            filtered.append({
-                "date": ts_date.isoformat(),
+        results = [
+            {
+                "date": date,
                 "email": email,
-                "cabang": str(cabang_raw).strip(),
-                "timestamp": parsed_ts.isoformat(),
-                "status": "Success"
-            })
+                "count": count
+            }
+            for (date, email), count in counts.items()
+        ]
 
-        filtered.sort(key=lambda x: (x["date"], x["email"]))
+        results.sort(key=lambda x: (x["date"], x["email"]))
 
-        log_app("filter_user_log_login", "success", count=len(filtered))
+        log_app("filter_user_log_login", "success", count=len(results))
         return jsonify({
-            "start_date": start_date.isoformat(),
-            "end_date": today_wib.isoformat(),
-            "total": len(filtered),
-            "data": filtered
+            "data": results
         }), 200
 
     except Exception as e:
