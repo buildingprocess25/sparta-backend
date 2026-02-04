@@ -426,23 +426,32 @@ def filter_user_log_login():
                 continue
 
             key = (ts_date.isoformat(), email)
-            counts[key] = counts.get(key, 0) + 1
+            if key not in counts:
+                counts[key] = {
+                    "count": 0,
+                    "latest_ts": parsed_ts
+                }
+            counts[key]["count"] += 1
+            if parsed_ts > counts[key]["latest_ts"]:
+                counts[key]["latest_ts"] = parsed_ts
 
         results = [
             {
                 "date": date,
                 "email": email,
-                "count": count,
-                "status": status,
-                "cabang": cabang_raw
+                "count": data["count"],
+                "timestamp": data["latest_ts"].isoformat()
             }
-            for (date, email), count in counts.items()
+            for (date, email), data in counts.items()
         ]
 
         results.sort(key=lambda x: (x["date"], x["email"]))
 
         log_app("filter_user_log_login", "success", count=len(results))
         return jsonify({
+            "start_date": start_date.isoformat(),
+            "end_date": today_wib.isoformat(),
+            "total": len(results),
             "data": results
         }), 200
 
