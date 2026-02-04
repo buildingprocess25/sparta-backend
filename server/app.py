@@ -429,19 +429,23 @@ def filter_user_log_login():
             if key not in counts:
                 counts[key] = {
                     "count": 0,
-                    "latest_ts": parsed_ts
+                    "latest_ts": parsed_ts,
+                    "cabang": str(cabang_raw).strip(),
+                    "status": status
                 }
             counts[key]["count"] += 1
             if parsed_ts > counts[key]["latest_ts"]:
                 counts[key]["latest_ts"] = parsed_ts
+                counts[key]["cabang"] = str(cabang_raw).strip()
+                counts[key]["status"] = status
 
         results = [
             {
                 "date": date,
                 "email": email,
                 "count": data["count"],
-                "cabang": cabang_raw,
-                "status": status,
+                "cabang": data["cabang"],
+                "status": data["status"],
                 "timestamp": data["latest_ts"].isoformat()
             }
             for (date, email), data in counts.items()
