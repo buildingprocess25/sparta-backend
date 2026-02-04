@@ -213,6 +213,46 @@ def format_ulok(nomor_ulok_raw: str) -> str:
     formatted = f"{core[:4]}-{core[4:8]}-{core[8:12]}"
     return f"{formatted}-R" if has_R else formatted
 
+def _parse_log_login_timestamp(value):
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.date):
+        return datetime.datetime.combine(value, datetime.time.min)
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.datetime(1899, 12, 30) + datetime.timedelta(days=float(value))
+        except Exception:
+            return None
+
+    s = str(value).strip()
+    if not s:
+        return None
+
+    s_normalized = s.replace("T", " ").replace("Z", "").strip()
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%m/%d/%Y",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.datetime.strptime(s_normalized, fmt)
+        except ValueError:
+            continue
+
+    try:
+        return datetime.datetime.fromisoformat(s_normalized)
+    except Exception:
+        return None
+
 def get_tanggal_h(start_date, jumlah_hari_kerja):
     tanggal = start_date
     count = 0
@@ -326,6 +366,85 @@ def check_ulok_rab_2():
         traceback.print_exc()
         log_app("check_ulok_rab_2", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/filter_user_log_login', methods=['GET'])
+def filter_user_log_login():
+    """
+    Filter Log Login dari Spreadsheet utama dengan kriteria:
+    - Timestamp di antara 2026-01-30 sampai hari ini (WIB)
+    - Status Login == Success
+    - Username (Email) unik per tanggal (1 email per tanggal)
+    """
+    log_app("filter_user_log_login", "request received")
+
+    try:
+        start_date = datetime.date(2026, 1, 30)
+        today_wib = datetime.datetime.now(timezone(timedelta(hours=7))).date()
+
+        spreadsheet = google_provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
+        worksheet = spreadsheet.worksheet("Log Login")
+        records = worksheet.get_all_records()
+
+        filtered = []
+        seen = set()
+
+        for record in records:
+            status_raw = (
+                record.get("Status Login")
+                or record.get("Status")
+                or record.get("status")
+                or ""
+            )
+            status = str(status_raw).strip().lower()
+            if status != "success":
+                continue
+
+            timestamp_raw = record.get("Timestamp") or record.get("timestamp") or record.get("Waktu")
+            parsed_ts = _parse_log_login_timestamp(timestamp_raw)
+            if not parsed_ts:
+                continue
+
+            ts_date = parsed_ts.date()
+            if ts_date < start_date or ts_date > today_wib:
+                continue
+
+            email_raw = (
+                record.get("Username (Email)")
+                or record.get("Username")
+                or record.get("Email")
+                or record.get("User")
+                or ""
+            )
+            email = str(email_raw).strip().lower()
+            if not email:
+                continue
+
+            key = (ts_date.isoformat(), email)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            filtered.append({
+                "date": ts_date.isoformat(),
+                "email": email,
+                "timestamp": parsed_ts.isoformat(),
+                "status": "Success"
+            })
+
+        filtered.sort(key=lambda x: (x["date"], x["email"]))
+
+        log_app("filter_user_log_login", "success", count=len(filtered))
+        return jsonify({
+            "start_date": start_date.isoformat(),
+            "end_date": today_wib.isoformat(),
+            "total": len(filtered),
+            "data": filtered
+        }), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        log_app("filter_user_log_login", "error", error=str(e))
+        return jsonify({"error": str(e)}), 500
 
 # --- ENDPOINTS UNTUK ALUR KERJA RAB ---
 @app.route('/api/submit_rab', methods=['POST'])
