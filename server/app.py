@@ -415,6 +415,13 @@ def filter_user_log_login():
                 or record.get("User")
                 or ""
             )
+
+            cabang_raw = (
+                record.get("Password (Cabang)")
+                or record.get("Branch")
+                or ""
+            )
+
             email = str(email_raw).strip().lower()
             if not email:
                 continue
@@ -427,6 +434,7 @@ def filter_user_log_login():
             filtered.append({
                 "date": ts_date.isoformat(),
                 "email": email,
+                "cabang": str(cabang_raw).strip(),
                 "timestamp": parsed_ts.isoformat(),
                 "status": "Success"
             })
