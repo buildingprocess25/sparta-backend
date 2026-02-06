@@ -87,47 +87,51 @@ class GoogleServiceProvider:
 
 
         # ==========================================
-        # 4. LOAD CREDENTIALS DOKUMENTASI (BARU)
+        # 4. LOAD CREDENTIALS DOKUMENTASI (OAUTH)
         # ==========================================
-        # (Ini yang pakai Service Account JSON untuk fitur migrasi)
-        print("🔄 Memuat Service Account Dokumentasi (Baru)...")
+        print("🔄 Memuat OAuth Dokumentasi (Baru)...")
         try:
-            # Menggunakan nama file dari config atau default
-            sa_filename = getattr(config, 'DOC_SERVICE_ACCOUNT_FILE', 'service_account_doc.json')
-            
-            # Logic Render Secret File
-            secret_path = os.path.join('/etc/secrets/', sa_filename)
-            
-            final_sa_path = None
-            if os.path.exists(secret_path):
-                final_sa_path = secret_path
-            elif os.path.exists(sa_filename):
-                final_sa_path = sa_filename
+            from google.oauth2.credentials import Credentials
+            from google.auth.transport.requests import Request as GoogleRequest
 
-            if final_sa_path:
-                # Load pakai Service Account
-                self.dokumentasi_creds = service_account.Credentials.from_service_account_file(
-                    final_sa_path, 
-                    scopes=self.dokumentasi_scopes
-                )
-                
-                # Inisialisasi Service (Variabel pakai prefix 'dokumentasi_')
-                self.dokumentasi_gspread = gspread.authorize(self.dokumentasi_creds)
-                self.dokumentasi_drive = build('drive', 'v3', credentials=self.dokumentasi_creds)
-                
-                # Buka Sheet Dokumentasi (ID Baru dari config)
-                doc_sheet_id = getattr(config, 'DOC_SHEET_ID', None)
-                if doc_sheet_id:
-                    self.dokumentasi_sheet = self.dokumentasi_gspread.open_by_key(doc_sheet_id)
-                    print("✅ Service Dokumentasi (Baru) Berhasil.")
-                else:
-                    print("⚠️ Warning: DOC_SHEET_ID belum ada di config.")
-                    self.dokumentasi_sheet = None
+            # Ambil OAuth dari config (pastikan sudah ditambahkan di config.py)
+            doc_client_id = getattr(config, "DOC_GOOGLE_CLIENT_ID", None)
+            doc_client_secret = getattr(config, "DOC_GOOGLE_CLIENT_SECRET", None)
+            doc_refresh_token = getattr(config, "DOC_GOOGLE_REFRESH_TOKEN", None)
+
+            if not all([doc_client_id, doc_client_secret, doc_refresh_token]):
+                raise Exception("DOC_GOOGLE_CLIENT_ID / DOC_GOOGLE_CLIENT_SECRET / DOC_GOOGLE_REFRESH_TOKEN belum lengkap")
+
+            self.dokumentasi_scopes = [
+                "https://www.googleapis.com/auth/drive.file",
+                "https://www.googleapis.com/auth/spreadsheets",
+            ]
+
+            self.dokumentasi_creds = Credentials(
+                None,
+                refresh_token=doc_refresh_token,
+                client_id=doc_client_id,
+                client_secret=doc_client_secret,
+                token_uri="https://oauth2.googleapis.com/token",
+                scopes=self.dokumentasi_scopes,
+            )
+            self.dokumentasi_creds.refresh(GoogleRequest())
+
+            # Inisialisasi service
+            self.dokumentasi_gspread = gspread.authorize(self.dokumentasi_creds)
+            self.dokumentasi_drive = build("drive", "v3", credentials=self.dokumentasi_creds)
+
+            # Buka Sheet Dokumentasi (ID dari config)
+            doc_sheet_id = getattr(config, "DOC_SHEET_ID", None)
+            if doc_sheet_id:
+                self.dokumentasi_sheet = self.dokumentasi_gspread.open_by_key(doc_sheet_id)
+                print("✅ Service Dokumentasi (OAuth) Berhasil.")
             else:
-                raise FileNotFoundError("File JSON Service Account tidak ketemu.")
+                print("⚠️ Warning: DOC_SHEET_ID belum ada di config.")
+                self.dokumentasi_sheet = None
 
         except Exception as e:
-            print(f"❌ Gagal memuat Dokumentasi Baru: {e}")
+            print(f"❌ Gagal memuat OAuth Dokumentasi: {e}")
             self.dokumentasi_drive = None
             self.dokumentasi_sheet = None
 
