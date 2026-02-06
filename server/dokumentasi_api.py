@@ -338,14 +338,23 @@ def doc_get_temp():
             photo_ids.append("")
             
     result = {
-        "nomorUlok": data_map.get("Nomor Ulok"),
-        "namaToko": data_map.get("Nama Toko"),
-        # ... map field lainnya sesuai kebutuhan frontend ...
-        "photos": photo_ids
+        "nomorUlok": data_map.get("Nomor Ulok", ""),
+        "namaToko": data_map.get("Nama Toko", ""),
+        "kodeToko": data_map.get("Kode Toko", ""),
+        "cabang": data_map.get("Cabang", ""),
+        "tanggalGo": to_ymd(data_map.get("Tanggal GO", "")),
+        "tanggalSt": to_ymd(data_map.get("Tanggal ST", "")),
+        "tanggalAmbilFoto": to_ymd(data_map.get("Tanggal Ambil Foto", "")),
+        "spkAwal": to_ymd(data_map.get("SPK Awal", "")),
+        "spkAkhir": to_ymd(data_map.get("SPK Akhir", "")),
+        "kontraktorSipil": data_map.get("Kontraktor Sipil", ""),
+        "kontraktorMe": data_map.get("Kontraktor ME", ""),
+        "emailPengirim": data_map.get("Email Pengirim", ""),
+        "photos": photo_ids,
     }
     # Kembalikan full data map juga supaya aman
-    result.update(data_map) 
-    result["photos"] = photo_ids # Override photos dengan list array
+    result.update(data_map)
+    result["photos"] = photo_ids  # Override photos dengan list array
 
     return jsonify({"ok": True, "data": result})
 
