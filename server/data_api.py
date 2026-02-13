@@ -38,7 +38,7 @@ SPREADSHEET_IDS = {
     "MADIUN": {"ME": "1UPv6sdqv5TtsL4UC3v0EOqY0MnvAB3Et-aTt2KMOrmI", "SIPIL": "1vJGFwQj92f9Mxs8dKT4dHDDCXer0DyFOPlUh__C956c"},
     "MAKASSAR": {"ME": "1XnFay1yEsQfUJ-fdccCCY8jfVuDks2sTUTgpuFrAj_k", "SIPIL": "1uUEIU7Ieqs7Nm68HBaRo4MHwob4RLTPUEtI_0LI6X28"},
     "MALANG": {"ME": "1FLZ-faMU1Cyp6OOVS5oQXdZNc4nDCvMs5rIzRvlEY0s", "SIPIL": "1EdKp2Yxz4GkEb7fyx8dLzIVNG7mSemZN_CnN3qQN_lI"},
-    "MANADO": {"ME": "1kJBHqvxmvb8Kw4UvyxD_ecZsrjGGgtkCql2EAab5xfw", "SIPIL": "1sbt6Fu-OvH5qXf-LN0MpQaBnLF3tn1QcCUTNBgrVVIU"},
+    "MANADO": {"ME": "1wL79QZT2YijdZ6ig77fuc08KEeRaOpeU0ofLaXQ_2B8", "SIPIL": "1Da1cdJN3Kye7zBYi09Bw--OcbTid208fsRUAaCeqDaI"},
     "MANOKWARI": {"ME": "1O9tKmAojv42gRsNn6lryZ6Npo_kSt_J1LDOT9ZCNVMs", "SIPIL": "1DXvR6m9gZ4K_1m0hJwyJnSRAXtzy8y8uEyk68_yqziE"},
     "MEDAN": {"ME": "1TaEaBMTAXxXRS73VB8Ijnp53pZI6F6odweCBQV4vaFo", "SIPIL": "1ty-YLmkZqGAmVu7UGxjdtyBkmoYRhGibTk7ZkUt2dPs"},
     "NTT": {"ME": "1anZZF1ptwE-j_DroCLep6yfRC0A8jrFXp8v9cZ5gh7k", "SIPIL": "1dCfRyTOgMayV-m7y647X0Gqm_FPbBVl4rwJ8SPrav9o"},
