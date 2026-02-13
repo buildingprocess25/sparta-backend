@@ -8,7 +8,7 @@ import os
 # 1. Membuat Blueprint
 data_bp = Blueprint('data_api', __name__)
 
-# --- Struktur ID Spreadsheet ---
+# --- Struktur ID Spreadsheet harga ---
 SPREADSHEET_IDS = {
     "ACEH": {"ME": "1KZyh0VVn7dZRyvEm6q7RV4iA5jzg7u2oRTIvSHxeFu0", "SIPIL": "11b_oUEmsjqFkB8CX8uOg8SUjlUpfgjZQq6qN1BtVBm4"},
     "BALARAJA": {"ME": "1FVRlRK1Qop1Q7OlHKsIc14BhRSHn9XH2gLWarxWMON4", "SIPIL": "1nBPJjM17vwO1tTsC2m8VRnnhQQKC_bUEpfFebfib_g0"},
