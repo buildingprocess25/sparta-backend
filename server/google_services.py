@@ -3508,11 +3508,27 @@ class GoogleServiceProvider:
             summary_data_sheet = opname_spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
             records = summary_data_sheet.get_all_records()
 
+            def is_core_data_row(row):
+                nomor_ulok = str(row.get('Nomor Ulok', '')).strip()
+
+                # Skip baris kosong
+                if not nomor_ulok:
+                    return False
+
+                # Skip baris mapping/template seperti: "Form 2 (Nomor Ulok)"
+                nomor_ulok_lower = nomor_ulok.lower()
+                if 'form 2' in nomor_ulok_lower or 'spk_data' in nomor_ulok_lower:
+                    return False
+
+                return True
+
+            filtered_records = [row for row in records if is_core_data_row(row)]
+
             return {
                 "status": "success",
-                "message": "Berhasil mengambil data summary opname.",
-                "total_data": len(records),
-                "data": records
+                "message": "Berhasil mengambil data summary opname (data inti).",
+                "total_data": len(filtered_records),
+                "data": filtered_records
             }
         except gspread.exceptions.WorksheetNotFound as e:
             print(f"Error: Worksheet SUMMARY_DATA tidak ditemukan: {e}")
