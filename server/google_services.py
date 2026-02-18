@@ -3494,6 +3494,39 @@ class GoogleServiceProvider:
                 "message": f"Terjadi kesalahan: {str(e)}"
             }
 
+    def get_all_summary_data_opname(self):
+        """
+        Mengambil seluruh data dari SUMMARY_DATA_SHEET_NAME
+        pada spreadsheet OPNAME_SHEET_ID.
+
+        Returns:
+        --------
+        dict: status, message, total_data, dan daftar data
+        """
+        try:
+            opname_spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
+            summary_data_sheet = opname_spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
+            records = summary_data_sheet.get_all_records()
+
+            return {
+                "status": "success",
+                "message": "Berhasil mengambil data summary opname.",
+                "total_data": len(records),
+                "data": records
+            }
+        except gspread.exceptions.WorksheetNotFound as e:
+            print(f"Error: Worksheet SUMMARY_DATA tidak ditemukan: {e}")
+            return {
+                "status": "error",
+                "message": f"Worksheet tidak ditemukan: {str(e)}"
+            }
+        except Exception as e:
+            print(f"Error get_all_summary_data_opname: {e}")
+            return {
+                "status": "error",
+                "message": f"Terjadi kesalahan: {str(e)}"
+            }
+
     def ensure_header_exists_in_sheet(self, spreadsheet, sheet_name, header_name):
         """
         Mengecek apakah header tertentu ada di baris 1 pada spreadsheet tertentu.

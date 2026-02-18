@@ -3254,6 +3254,37 @@ def opname_locked():
         }), 500
 
 
+# --- ENDPOINT GET ALL SUMMARY DATA OPNAME ---
+@app.route('/api/opname/summary-data', methods=['GET'])
+def get_all_summary_data_opname():
+    """
+    Endpoint untuk mengambil seluruh data dari sheet SUMMARY_DATA_SHEET_NAME
+    pada spreadsheet OPNAME_SHEET_ID.
+    """
+    log_app("get_all_summary_data_opname", "request received")
+
+    try:
+        result = google_provider.get_all_summary_data_opname()
+        log_app(
+            "get_all_summary_data_opname",
+            "result",
+            status=result.get("status"),
+            total_data=result.get("total_data", 0)
+        )
+
+        if result.get("status") == "success":
+            return jsonify(result), 200
+        return jsonify(result), 400
+
+    except Exception as e:
+        traceback.print_exc()
+        log_app("get_all_summary_data_opname", "error", error=str(e))
+        return jsonify({
+            "status": "error",
+            "message": f"Terjadi kesalahan server: {str(e)}"
+        }), 500
+
+
 # --- ENDPOINT PROXY GAS (MIGRASI DARI BACKEND LAMA) ---
 @app.route('/api/form', methods=['GET', 'POST'])
 def proxy_form():
