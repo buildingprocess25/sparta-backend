@@ -6,12 +6,14 @@ import os
 import traceback
 import json
 import base64
+import io
 import requests # Pastikan sudah install: pip install requests
 from flask import Flask, request, jsonify, render_template, url_for
 from dotenv import load_dotenv
 from flask_cors import CORS
 from datetime import timezone, timedelta
 from num2words import num2words
+from PyPDF2 import PdfMerger
 
 import config
 from google_services import GoogleServiceProvider
@@ -212,6 +214,19 @@ def format_ulok(nomor_ulok_raw: str) -> str:
         return nomor_ulok_raw
     formatted = f"{core[:4]}-{core[4:8]}-{core[8:12]}"
     return f"{formatted}-R" if has_R else formatted
+
+def merge_pdf_bytes(pdf_documents):
+    merger = PdfMerger()
+    output = io.BytesIO()
+    try:
+        for pdf_content in pdf_documents:
+            if pdf_content:
+                merger.append(io.BytesIO(pdf_content))
+        merger.write(output)
+        output.seek(0)
+        return output.getvalue()
+    finally:
+        merger.close()
 
 def _parse_log_login_timestamp(value):
     if value is None or value == "":
@@ -602,14 +617,16 @@ def submit_rab():
                     f"{clean_ulok[8:]}"
                 )
 
-        # --- 5) GENERATE PDF (NON-SBO & REKAP) ---
+        # --- 5) GENERATE PDF (NON-SBO, REKAP, DAN GABUNGAN) ---
         pdf_nonsbo_bytes = create_pdf_from_data(
             google_provider, data, exclude_sbo=True
         )
         pdf_recap_bytes = create_recap_pdf(google_provider, data)
+        pdf_merged_bytes = merge_pdf_bytes([pdf_nonsbo_bytes, pdf_recap_bytes])
 
         pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{nomor_ulok_formatted}.pdf"
         pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{nomor_ulok_formatted}.pdf"
+        pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{nomor_ulok_formatted}.pdf"
 
         link_pdf_nonsbo = google_provider.upload_file_to_drive(
             pdf_nonsbo_bytes,
@@ -623,9 +640,16 @@ def submit_rab():
             'application/pdf',
             config.PDF_STORAGE_FOLDER_ID
         )
+        link_pdf_merged = google_provider.upload_file_to_drive(
+            pdf_merged_bytes,
+            pdf_merged_filename,
+            'application/pdf',
+            config.PDF_STORAGE_FOLDER_ID
+        )
 
         data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
         data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
+        data[config.COLUMN_NAMES.LINK_PDF] = link_pdf_merged
         data[config.COLUMN_NAMES.LOKASI] = nomor_ulok_formatted
 
         # --- 6) SIMPAN KE SHEET ---
@@ -1147,9 +1171,16 @@ def handle_rab_approval():
                 email_html_manager = render_template('email_template.html', doc_type="RAB", level='Manajer', form_data=row_data, approval_url=approval_url_manager, rejection_url=rejection_url_manager, additional_info=f"Telah disetujui oleh Koordinator: {approver}")
                 pdf_nonsbo_bytes = create_pdf_from_data(google_provider, row_data, exclude_sbo=True)
                 pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
+                pdf_merged_bytes = merge_pdf_bytes([pdf_nonsbo_bytes, pdf_recap_bytes])
                 pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
                 pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
-                google_provider.send_email(manager_email, f"[TAHAP 2: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}", email_html_manager, attachments=[(pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'),(pdf_recap_filename, pdf_recap_bytes, 'application/pdf')])
+                pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+                google_provider.send_email(
+                    manager_email,
+                    f"[TAHAP 2: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                    email_html_manager,
+                    attachments=[(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
+                )
             return render_template('response_page.html', title='Persetujuan Diteruskan', message='Terima kasih. Persetujuan Anda telah dicatat.', logo_url=logo_url)
         
         elif level == 'manager' and action == 'approve':
@@ -1169,6 +1200,9 @@ def handle_rab_approval():
             pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
             pdf_recap_filename = f"DISETUJUI_REKAP_RAB_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
 
+            pdf_merged_bytes = merge_pdf_bytes([pdf_nonsbo_bytes, pdf_recap_bytes])
+            pdf_merged_filename = f"DISETUJUI_RAB_GABUNGAN_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+
             # Upload ke Drive
             link_pdf_nonsbo = google_provider.upload_file_to_drive(
                 pdf_nonsbo_bytes, pdf_nonsbo_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
@@ -1176,13 +1210,18 @@ def handle_rab_approval():
             link_pdf_rekap = google_provider.upload_file_to_drive(
                 pdf_recap_bytes, pdf_recap_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
             )
+            link_pdf_merged = google_provider.upload_file_to_drive(
+                pdf_merged_bytes, pdf_merged_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
+            )
 
             # Update sheet
             google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_NONSBO, link_pdf_nonsbo)
             google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_REKAP, link_pdf_rekap)
+            google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF, link_pdf_merged)
 
             row_data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
             row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
+            row_data[config.COLUMN_NAMES.LINK_PDF] = link_pdf_merged
 
             google_provider.copy_to_approved_sheet(row_data)
             
@@ -1196,10 +1235,7 @@ def handle_rab_approval():
             manager_email = approver  # manager yang menyetujui
 
             # ====== Attachment bersama ======
-            email_attachments = [
-                (pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'),
-                (pdf_recap_filename, pdf_recap_bytes, 'application/pdf')
-            ]
+            email_attachments = [(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
 
             subject = f"[FINAL - DISETUJUI] Pengajuan RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}"
 
@@ -1207,15 +1243,13 @@ def handle_rab_approval():
             base_body = (
                 f"<p>Pengajuan RAB Toko <b>{nama_toko}</b> untuk proyek <b>{jenis_toko} - {lingkup_pekerjaan}</b> "
                 f"telah disetujui sepenuhnya.</p>"
-                f"<p>Tiga versi file PDF RAB telah dilampirkan:</p>"
+                f"<p>File PDF RAB gabungan telah dilampirkan:</p>"
                 f"<ul>"
-                f"<li><b>{pdf_nonsbo_filename}</b>: Hanya berisi item pekerjaan di luar SBO.</li>"
-                f"<li><b>{pdf_recap_filename}</b>: Rekapitulasi Total Biaya.</li>"
+                f"<li><b>{pdf_merged_filename}</b>: Gabungan PDF Non-SBO dan Rekapitulasi.</li>"
                 f"</ul>"
                 f"<p>Link Google Drive:</p>"
                 f"<ul>"
-                f"<li><a href='{link_pdf_nonsbo}'>Link PDF Non-SBO</a></li>"
-                f"<li><a href='{link_pdf_rekap}'>Link PDF Rekapitulasi</a></li>"
+                f"<li><a href='{link_pdf_merged}'>Link PDF Gabungan</a></li>"
                 f"</ul>"
             )
 
@@ -1754,14 +1788,25 @@ def insert_gantt_data():
                                 nomor_ulok_display = format_ulok(nomor_ulok)
                                 
                                 # Ambil link PDF dari data RAB
+                                link_pdf_merged = rab_data.get(config.COLUMN_NAMES.LINK_PDF, '')
                                 link_pdf_nonsbo = rab_data.get(config.COLUMN_NAMES.LINK_PDF_NONSBO, '')
                                 link_pdf_rekap = rab_data.get(config.COLUMN_NAMES.LINK_PDF_REKAP, '')
                                 
                                 # Siapkan attachment - download file dari Drive
                                 # download_file_from_link returns (filename, bytes, mimetype)
                                 attachments = []
+
+                                if link_pdf_merged:
+                                    try:
+                                        downloaded = google_provider.download_file_from_link(link_pdf_merged)
+                                        if downloaded and downloaded[1]:
+                                            _, file_bytes, _ = downloaded
+                                            pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{nomor_ulok_display}.pdf"
+                                            attachments.append((pdf_merged_filename, file_bytes, 'application/pdf'))
+                                    except Exception as e:
+                                        print(f"⚠️ Gagal download PDF Gabungan: {e}")
                                 
-                                if link_pdf_nonsbo:
+                                if not attachments and link_pdf_nonsbo:
                                     try:
                                         downloaded = google_provider.download_file_from_link(link_pdf_nonsbo)
                                         if downloaded and downloaded[1]:  # (filename, bytes, mimetype)
@@ -1771,7 +1816,7 @@ def insert_gantt_data():
                                     except Exception as e:
                                         print(f"⚠️ Gagal download PDF Non-SBO: {e}")
                                 
-                                if link_pdf_rekap:
+                                if not attachments and link_pdf_rekap:
                                     try:
                                         downloaded = google_provider.download_file_from_link(link_pdf_rekap)
                                         if downloaded and downloaded[1]:  # (filename, bytes, mimetype)

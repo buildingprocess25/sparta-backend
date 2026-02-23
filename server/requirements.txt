@@ -16,3 +16,4 @@ requests
 uvicorn
 oauth2client
 pytz
+PyPDF2
