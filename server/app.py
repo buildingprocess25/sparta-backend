@@ -299,6 +299,10 @@ def login():
             log_app("login", "success", email=email, role=role)
             return jsonify({"status": "success", "message": "Login successful", "role": role}), 200
         else:
+            registered_user = google_provider.get_nama_lengkap_dan_cabang_by_email(email)
+            if not registered_user:
+                log_app("login", "email not registered", email=email)
+                return jsonify({"status": "error", "message": "Email belum terdaftar"}), 404
             log_app("login", "invalid credentials", email=email, cabang=cabang)
             return jsonify({"status": "error", "message": "Invalid credentials"}), 401
     except Exception as e:
