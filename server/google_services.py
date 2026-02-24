@@ -3404,6 +3404,49 @@ class GoogleServiceProvider:
             # Normalisasi input
             target_ulok = self._normalize_ulok(nomor_ulok)
             target_lingkup = self._normalize_lingkup(lingkup_pekerjaan)
+
+            # Hitung Nilai Toko berbobot dari sheet opname_final
+            opname_sheet = opname_spreadsheet.worksheet(config.OPNAME_SHEET_NAME)
+            opname_records = opname_sheet.get_all_records()
+
+            matched_records = []
+            for record in opname_records:
+                record_ulok = self._normalize_ulok(record.get('no_ulok', ''))
+                record_lingkup = self._normalize_lingkup(record.get('lingkup_pekerjaan', ''))
+                if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                    matched_records.append(record)
+
+            total_data = len(matched_records)
+
+            def _norm_text(value):
+                return str(value or '').strip().lower()
+
+            if total_data > 0:
+                count_desain_sesuai = sum(
+                    1 for row in matched_records
+                    if _norm_text(row.get('desain')) == 'sesuai'
+                )
+                count_kualitas_baik = sum(
+                    1 for row in matched_records
+                    if _norm_text(row.get('kualitas')) == 'baik'
+                )
+                count_spesifikasi_sesuai = sum(
+                    1 for row in matched_records
+                    if _norm_text(row.get('spesifikasi')) == 'sesuai'
+                )
+
+                nilai_desain = (count_desain_sesuai / total_data) * 30
+                nilai_kualitas = (count_kualitas_baik / total_data) * 35
+                nilai_spesifikasi = (count_spesifikasi_sesuai / total_data) * 35
+                nilai_toko = round(nilai_desain + nilai_kualitas + nilai_spesifikasi, 2)
+            else:
+                count_desain_sesuai = 0
+                count_kualitas_baik = 0
+                count_spesifikasi_sesuai = 0
+                nilai_desain = 0
+                nilai_kualitas = 0
+                nilai_spesifikasi = 0
+                nilai_toko = 0
             
             # Tanggal hari ini dalam format DD/MM/YYYY
             today = datetime.now(timezone(timedelta(hours=7)))  # WIB
@@ -3477,16 +3520,48 @@ class GoogleServiceProvider:
                     
                     # Update tanggal_opname_final di SUMMARY_DATA
                     summary_data_sheet.update_cell(found_row_index_data, col_index_data, tanggal_hari_ini)
+
+                    # Update Nilai Toko di SUMMARY_DATA
+                    nilai_toko_col_name = 'Nilai Toko'
+                    try:
+                        nilai_toko_col_index = summary_data_headers.index(nilai_toko_col_name) + 1
+                    except ValueError:
+                        print(f"Kolom '{nilai_toko_col_name}' tidak ditemukan di SUMMARY_DATA, mencoba menambahkan...")
+                        self.ensure_header_exists_in_sheet(opname_spreadsheet, config.SUMMARY_DATA_SHEET_NAME, nilai_toko_col_name)
+                        summary_data_headers = summary_data_sheet.row_values(1)
+                        nilai_toko_col_index = summary_data_headers.index(nilai_toko_col_name) + 1
+
+                    summary_data_sheet.update_cell(found_row_index_data, nilai_toko_col_index, nilai_toko)
                     
                     summary_data_result = {
                         "summary_data_status": "success",
                         "summary_data_message": f"tanggal_opname_final berhasil diupdate di SUMMARY_DATA",
-                        "summary_data_row_index": found_row_index_data
+                        "summary_data_row_index": found_row_index_data,
+                        "nilai_toko": nilai_toko,
+                        "nilai_toko_detail": {
+                            "total_data": total_data,
+                            "desain_sesuai_count": count_desain_sesuai,
+                            "kualitas_baik_count": count_kualitas_baik,
+                            "spesifikasi_sesuai_count": count_spesifikasi_sesuai,
+                            "nilai_desain": round(nilai_desain, 2),
+                            "nilai_kualitas": round(nilai_kualitas, 2),
+                            "nilai_spesifikasi": round(nilai_spesifikasi, 2)
+                        }
                     }
                 else:
                     summary_data_result = {
                         "summary_data_status": "warning",
-                        "summary_data_message": f"Data tidak ditemukan di SUMMARY_DATA untuk Nomor Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}"
+                        "summary_data_message": f"Data tidak ditemukan di SUMMARY_DATA untuk Nomor Ulok: {nomor_ulok}, Lingkup: {lingkup_pekerjaan}",
+                        "nilai_toko": nilai_toko,
+                        "nilai_toko_detail": {
+                            "total_data": total_data,
+                            "desain_sesuai_count": count_desain_sesuai,
+                            "kualitas_baik_count": count_kualitas_baik,
+                            "spesifikasi_sesuai_count": count_spesifikasi_sesuai,
+                            "nilai_desain": round(nilai_desain, 2),
+                            "nilai_kualitas": round(nilai_kualitas, 2),
+                            "nilai_spesifikasi": round(nilai_spesifikasi, 2)
+                        }
                     }
                     
             except gspread.exceptions.WorksheetNotFound as e:
