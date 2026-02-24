@@ -2507,6 +2507,7 @@ def submit_spk():
         # Timestamp & status baru (selalu reset saat submit)
         data['Timestamp'] = now.isoformat()
         data['Status'] = config.STATUS.WAITING_FOR_BM_APPROVAL
+        
 
         # ---- PERHITUNGAN DURASI ----
         start_date = datetime.datetime.fromisoformat(data['Waktu Mulai'])
@@ -2590,6 +2591,8 @@ def submit_spk():
             html_body=email_html,
             attachments=[(pdf_filename, pdf_bytes, 'application/pdf')]
         )
+
+        google_provider.send_status_spk(data['Status'], data['Nomor Ulok'], data['Lingkup Pekerjaan'])
 
         log_app("submit_spk", "email sent", to=branch_manager_email)
 

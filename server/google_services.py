@@ -2291,6 +2291,7 @@ class GoogleServiceProvider:
             print(f"Gagal menyalin data ke approved sheet RAB 2: {e}")
             return False
 
+    # Sheet SUMMARY buat rab
     def copy_to_summary_sheet(self, row_data, source_type='RAB'):
         """
         Menyalin data RAB/SPK yang sudah disetujui ke sheet summary untuk rekap.
@@ -2343,7 +2344,8 @@ class GoogleServiceProvider:
                     'Luas Area Parkir': row_data.get('Luas Area Parkir', ''),
                     'Luas Area Sales': row_data.get('Luas Area Sales', ''),
                     'Luas Gudang': row_data.get('Luas Gudang', ''),
-                    'Total Penawaran Final': row_data.get('Grand Total Final', row_data.get(config.COLUMN_NAMES.GRAND_TOTAL_FINAL, ''))
+                    'Total Penawaran Final': row_data.get('Grand Total Final', row_data.get(config.COLUMN_NAMES.GRAND_TOTAL_FINAL, '')),
+                    'Kategori': row_data.get('Kategori_Lokasi', row_data.get(config.COLUMN_NAMES.KATEGORI_LOKASI, '')),
                 }
                 
                 # 4. Ambil header dari sheet untuk memastikan urutan yang benar
@@ -2404,7 +2406,34 @@ class GoogleServiceProvider:
         except Exception as e:
             print(f"Gagal menyalin data ke summary sheet: {e}")
             return False
+    # Ke summary Sheet
+    def send_status_spk(self, status, nomor_ulok, lingkup_pekerjaan):
+        spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
+            
+            # 2. Buka Worksheet Summary
+        summary_sheet = spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
 
+        # Cari baris yang sesuai berdasarkan Nomor Ulok dan Lingkup Pekerjaan
+        all_records = summary_sheet.get_all_records()
+        headers = summary_sheet.row_values(1)
+        
+        row_found = None
+        for idx, record in enumerate(all_records):
+            record_ulok = str(record.get('Nomor Ulok', '')).strip()
+            record_lingkup = str(record.get('Lingkup_Pekerjaan', '')).strip()
+            
+            if record_ulok.upper() == nomor_ulok.strip().upper() and record_lingkup.upper() == lingkup_pekerjaan.strip().upper():
+                row_found = idx + 2  # +2 karena index 0-based dan ada header
+                break
+        
+        if row_found:
+            # Update kolom Status pada baris yang ditemukan
+            col_idx = headers.index('Status') + 1  # +1 karena gspread 1-based
+            summary_sheet.update_cell(row_found, col_idx, status)
+            print(f"Berhasil update status SPK ke sheet Summary untuk Ulok: {nomor_ulok}")
+        else:
+            print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
+        
 
     def delete_row(self, worksheet_name, row_index):
         try:
