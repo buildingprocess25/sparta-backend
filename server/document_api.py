@@ -321,10 +321,6 @@ def update_document(kode_toko):
                 if len(parts) >= 3:
                     old_files_list.append({"category": parts[0], "filename": parts[1], "link": parts[2]})
 
-        # ==============================================================================
-        # MULAI IMPLEMENTASI DELETE LOGIC (EXPLICIT DELETE FLAG)
-        # ==============================================================================
-        
         # Ambil daftar folder kategori yang ada di Drive
         category_folders_map = {}
         existing_files_drive = []
@@ -409,10 +405,7 @@ def update_document(kode_toko):
                         error=str(del_err),
                     )
         
-        # ==============================================================================
-        # SELESAI IMPLEMENTASI DELETE LOGIC
-        # ==============================================================================
-
+       
         # Logic Upload Baru & Pertahankan File Lama
         new_file_links = []
         category_cache = {}
