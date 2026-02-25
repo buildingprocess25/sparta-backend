@@ -54,6 +54,8 @@ CORS(app,
          "https://penyimpanan-dokumen.vercel.app/",
          "https://dokumentasi-bangunan.vercel.app",
          "https://dokumentasi-bangunan.vercel.app/",
+         "https://sparta-bnm.vercel.app/",
+         "https://sparta-bnm.vercel.app",
 
      ],
      methods=["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
