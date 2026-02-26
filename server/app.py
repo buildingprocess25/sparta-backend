@@ -544,6 +544,9 @@ def submit_rab():
         data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_COORDINATOR
         data[config.COLUMN_NAMES.TIMESTAMP] = datetime.datetime.now(WIB).isoformat()
 
+        google_provider.send_status_rab(config.STATUS.WAITING_FOR_COORDINATOR, data.get(config.COLUMN_NAMES.LOKASI, ''), data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, ''))
+
+
         # PENTING: Jika Revisi, kita harus MENGOSONGKAN kolom persetujuan lama & alasan penolakan
         # agar flow dimulai dari awal lagi di Google Sheet
         data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = ""

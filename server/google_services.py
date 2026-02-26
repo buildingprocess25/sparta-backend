@@ -2433,7 +2433,34 @@ class GoogleServiceProvider:
             print(f"Berhasil update status SPK ke sheet Summary untuk Ulok: {nomor_ulok}")
         else:
             print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
+    
+    # Ke summary Sheet RAB
+    def send_status_rab(self, status, nomor_ulok, lingkup_pekerjaan):
+        spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
+            
+            # 2. Buka Worksheet Summary
+        summary_sheet = spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
+
+        # Cari baris yang sesuai berdasarkan Nomor Ulok dan Lingkup Pekerjaan
+        all_records = summary_sheet.get_all_records()
+        headers = summary_sheet.row_values(1)
         
+        row_found = None
+        for idx, record in enumerate(all_records):
+            record_ulok = str(record.get('Nomor Ulok', '')).strip()
+            record_lingkup = str(record.get('Lingkup_Pekerjaan', '')).strip()
+            
+            if record_ulok.upper() == nomor_ulok.strip().upper() and record_lingkup.upper() == lingkup_pekerjaan.strip().upper():
+                row_found = idx + 2  # +2 karena index 0-based dan ada header
+                break
+        
+        if row_found:
+            # Update kolom Status pada baris yang ditemukan
+            col_idx = headers.index('Status_Rab') + 1  # +1 karena gspread 1-based
+            summary_sheet.update_cell(row_found, col_idx, status)
+            print(f"Berhasil update status RAB ke sheet Summary untuk Ulok: {nomor_ulok}")
+        else:
+            print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
 
     def delete_row(self, worksheet_name, row_index):
         try:
