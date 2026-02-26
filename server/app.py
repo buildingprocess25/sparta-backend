@@ -544,6 +544,7 @@ def submit_rab():
         data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_DIREKTUR_APPROVAL
         data[config.COLUMN_NAMES.TIMESTAMP] = datetime.datetime.now(WIB).isoformat()
 
+        google_provider.send_status_rab(config.STATUS.WAITING_FOR_DIREKTUR_APPROVAL, data.get(config.COLUMN_NAMES.LOKASI, ''), data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, ''))
         # PENTING: Jika Revisi, kita harus MENGOSONGKAN kolom persetujuan lama & alasan penolakan
         # agar flow dimulai dari awal lagi di Google Sheet
         data[config.COLUMN_NAMES.DIREKTUR_APPROVER] = ""
@@ -2686,6 +2687,7 @@ def submit_spk():
             attachments=[(pdf_filename, pdf_bytes, 'application/pdf')]
         )
 
+        # SPK STATUS ke Summary
         google_provider.send_status_spk(data['Status'], data['Nomor Ulok'], data['Lingkup Pekerjaan'])
 
         log_app("submit_spk", "email sent", to=branch_manager_email)
