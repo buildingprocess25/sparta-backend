@@ -3610,7 +3610,26 @@ class GoogleServiceProvider:
         try:
             opname_spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
             summary_data_sheet = opname_spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
-            records = summary_data_sheet.get_all_records()
+            # Gunakan get_all_values agar format asli dari spreadsheet tetap terjaga
+            # (contoh: angka dengan koma/desimal lokal tidak di-convert otomatis)
+            all_values = summary_data_sheet.get_all_values()
+
+            if not all_values:
+                return {
+                    "status": "success",
+                    "message": "Berhasil mengambil data summary opname (data inti).",
+                    "total_data": 0,
+                    "data": []
+                }
+
+            headers = all_values[0]
+            data_rows = all_values[1:]
+
+            # Mapping manual agar tetap return list of dict seperti sebelumnya
+            records = [
+                {headers[i]: row[i] if i < len(row) else "" for i in range(len(headers))}
+                for row in data_rows
+            ]
 
             def is_core_data_row(row):
                 nomor_ulok = str(row.get('Nomor Ulok', '')).strip()
