@@ -2249,6 +2249,60 @@ class GoogleServiceProvider:
             print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
         return emails
 
+    def get_direktur_email_by_nama_pt(self, nama_pt):
+        """
+        Cari email DIREKTUR berdasarkan NAMA_PT di sheet Cabang.
+        Logika: cari baris di sheet Cabang dimana Nama_PT cocok DAN JABATAN == 'DIREKTUR'.
+        
+        Returns: str email atau None
+        """
+        if not nama_pt:
+            return None
+        try:
+            cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
+            records = cabang_sheet.get_all_records()
+            for record in records:
+                record_nama_pt = str(record.get('Nama_PT', '') or record.get('NAMA_PT', '')).strip()
+                record_jabatan = str(record.get('JABATAN', '')).strip().upper()
+                if record_nama_pt.lower() == nama_pt.strip().lower() and record_jabatan == config.JABATAN.DIREKTUR:
+                    email = record.get('EMAIL_SAT', '')
+                    if email:
+                        return email.strip()
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
+        except Exception as e:
+            print(f"Error get_direktur_email_by_nama_pt: {e}")
+        return None
+
+    def get_direktur_info_by_nama_pt(self, nama_pt):
+        """
+        Cari info lengkap DIREKTUR berdasarkan NAMA_PT di sheet Cabang.
+        Returns: dict dengan keys: email, nama_direktur, no_rekening, nama_bank, kota, alamat_pt
+        atau dict kosong jika tidak ditemukan.
+        """
+        if not nama_pt:
+            return {}
+        try:
+            cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
+            records = cabang_sheet.get_all_records()
+            for record in records:
+                record_nama_pt = str(record.get('Nama_PT', '') or record.get('NAMA_PT', '')).strip()
+                record_jabatan = str(record.get('JABATAN', '')).strip().upper()
+                if record_nama_pt.lower() == nama_pt.strip().lower() and record_jabatan == config.JABATAN.DIREKTUR:
+                    return {
+                        'email': str(record.get('EMAIL_SAT', '')).strip(),
+                        'nama_direktur': str(record.get('NAMA LENGKAP', '') or record.get('NAMA_LENGKAP', '')).strip(),
+                        'no_rekening': str(record.get('NO_REKENING', '') or record.get('No_Rekening', '')).strip(),
+                        'nama_bank': str(record.get('NAMA_BANK', '') or record.get('Nama_Bank', '')).strip(),
+                        'kota': str(record.get('KOTA', '') or record.get('Kota', '')).strip(),
+                        'alamat_pt': str(record.get('ALAMAT_PT', '') or record.get('Alamat_PT', '')).strip(),
+                    }
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
+        except Exception as e:
+            print(f"Error get_direktur_info_by_nama_pt: {e}")
+        return {}
+
     def copy_to_approved_sheet(self, row_data):
         try:
             approved_sheet = self.sheet.worksheet(config.APPROVED_DATA_SHEET_NAME)
@@ -2495,6 +2549,7 @@ class GoogleServiceProvider:
                 # Jika status DITOLAK, fungsi ini akan mengabaikannya (return False untuk row itu),
                 # sehingga kode di app.py bisa lanjut mengecek apakah ini Revisi.
                 active_statuses = [
+                    config.STATUS.WAITING_FOR_DIREKTUR_APPROVAL,
                     config.STATUS.WAITING_FOR_COORDINATOR, 
                     config.STATUS.WAITING_FOR_MANAGER, 
                     config.STATUS.APPROVED
@@ -2808,7 +2863,7 @@ class GoogleServiceProvider:
             for i, record in enumerate(all_records, start=2):
                 status = str(record.get(config.COLUMN_NAMES.STATUS, "")).strip()
 
-                if status in [config.STATUS.REJECTED_BY_COORDINATOR, config.STATUS.REJECTED_BY_MANAGER]:
+                if status in [config.STATUS.REJECTED_BY_DIREKTUR, config.STATUS.REJECTED_BY_COORDINATOR, config.STATUS.REJECTED_BY_MANAGER]:
                     rec_ulok_raw = str(record.get(config.COLUMN_NAMES.LOKASI, ""))
                     rec_lingkup_raw = record.get(
                         config.COLUMN_NAMES.LINGKUP_PEKERJAAN, 

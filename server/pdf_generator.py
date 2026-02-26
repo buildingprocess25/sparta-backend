@@ -756,3 +756,114 @@ def create_recap_pdf_il(google_provider, form_data):
     )
     
     return HTML(string=html_string).write_pdf()
+
+
+def create_surat_penawaran_pdf(google_provider, form_data, direktur_info=None):
+    """
+    Generate PDF Surat Penawaran Harga Pekerjaan.
+    
+    Parameters:
+    -----------
+    google_provider : GoogleServiceProvider
+    form_data : dict - data RAB dari form
+    direktur_info : dict - info direktur (nama_direktur, no_rekening, nama_bank, alamat_pt, kota)
+    
+    Returns:
+    --------
+    bytes : PDF content
+    """
+    from num2words import num2words
+    
+    if direktur_info is None:
+        direktur_info = {}
+    
+    # Ambil data dari form
+    nama_pt = form_data.get(config.COLUMN_NAMES.NAMA_PT, '') or form_data.get('Nama_PT', '')
+    proyek = form_data.get(config.COLUMN_NAMES.PROYEK, '') or form_data.get('Proyek', 'N/A')
+    lingkup = form_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, '') or form_data.get('Lingkup_Pekerjaan', 'N/A')
+    nama_toko = form_data.get('Nama_Toko', '') or form_data.get('nama_toko', 'N/A')
+    alamat = form_data.get(config.COLUMN_NAMES.ALAMAT, '') or form_data.get('Alamat', '')
+    cabang = form_data.get(config.COLUMN_NAMES.CABANG, '') or form_data.get('Cabang', '')
+    nomor_ulok = form_data.get(config.COLUMN_NAMES.LOKASI, '') or form_data.get('Nomor Ulok', '')
+    
+    # Grand Total Final (setelah pembulatan + PPN)
+    try:
+        grand_total_final = float(form_data.get(config.COLUMN_NAMES.GRAND_TOTAL_FINAL, 0) or 0)
+    except (ValueError, TypeError):
+        grand_total_final = 0
+    
+    # Format grand total
+    grand_total_formatted = format_rupiah(grand_total_final)
+    
+    # Terbilang
+    try:
+        terbilang = num2words(grand_total_final, lang='id').title()
+    except Exception:
+        terbilang = "Nol"
+    
+    # Tanggal surat (hari ini)
+    now = datetime.now()
+    
+    # Format tanggal Indonesia
+    bulan_indonesia = {
+        1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April',
+        5: 'Mei', 6: 'Juni', 7: 'Juli', 8: 'Agustus',
+        9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'
+    }
+    hari_indonesia = {
+        0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis',
+        4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'
+    }
+    
+    tanggal_surat = f"{now.day} {bulan_indonesia.get(now.month, '')} {now.year}"
+    tanggal_tender = f"{hari_indonesia.get(now.weekday(), '')}, {now.strftime('%d/%m/%Y')}"
+    tanggal_aanwijzing = tanggal_tender
+    
+    # Nomor surat: generate berdasarkan bulan/tahun
+    bulan_romawi = {
+        1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI',
+        7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII'
+    }
+    
+    # Singkatan PT untuk nomor surat
+    pt_singkat = ''
+    if nama_pt:
+        # Ambil inisial dari nama PT (hapus "PT." prefix)
+        pt_clean = nama_pt.replace('PT.', '').replace('PT', '').strip()
+        words = pt_clean.split()
+        pt_singkat = ''.join([w[0].upper() for w in words if w])
+    
+    nomor_surat = f"001/{pt_singkat}/SPH/{bulan_romawi.get(now.month, 'I')}/{now.year}"
+    
+    # Info dari direktur_info
+    nama_direktur = direktur_info.get('nama_direktur', '')
+    no_rekening = direktur_info.get('no_rekening', '')
+    nama_bank = direktur_info.get('nama_bank', '')
+    kota = direktur_info.get('kota', cabang or 'Jakarta')
+    
+    # Lokasi tender
+    lokasi_tender = alamat if alamat else (cabang or 'N/A')
+    
+    html_string = render_template(
+        'surat_penawaran_template.html',
+        nomor_surat=nomor_surat,
+        nama_pt=nama_pt,
+        proyek=proyek,
+        lingkup_pekerjaan=lingkup,
+        nama_toko=nama_toko,
+        alamat_toko=alamat or lokasi_tender,
+        tanggal_surat=tanggal_surat,
+        tanggal_tender=tanggal_tender,
+        tanggal_aanwijzing=tanggal_aanwijzing,
+        grand_total_formatted=grand_total_formatted,
+        terbilang=terbilang,
+        nama_direktur=nama_direktur,
+        no_rekening=no_rekening,
+        nama_bank=nama_bank,
+        kota_penandatangan=kota,
+        lokasi_tender=lokasi_tender,
+        nomor_ulok=nomor_ulok,
+        cabang=cabang
+    )
+    
+    return HTML(string=html_string).write_pdf()

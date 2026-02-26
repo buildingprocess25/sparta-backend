@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Surat Penawaran Harga Pekerjaan</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm 2.5cm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            color: #000;
+            line-height: 1.5;
+        }
+
+        .container {
+            width: 100%;
+        }
+
+        .header-info {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .header-info td {
+            padding: 1px 0;
+            vertical-align: top;
+            font-size: 11px;
+        }
+
+        .header-info .label {
+            width: 80px;
+        }
+
+        .header-info .separator {
+            width: 10px;
+            text-align: center;
+        }
+
+        .header-info .value {}
+
+        .header-info .bold {
+            font-weight: bold;
+        }
+
+        .recipient {
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+
+        .recipient p {
+            margin: 1px 0;
+        }
+
+        .content {
+            text-align: justify;
+        }
+
+        .content p {
+            margin: 5px 0;
+        }
+
+        .content ol {
+            padding-left: 20px;
+            margin: 5px 0;
+        }
+
+        .content ol>li {
+            margin-bottom: 8px;
+            text-align: justify;
+        }
+
+        .detail-table {
+            margin: 5px 0 5px 20px;
+        }
+
+        .detail-table td {
+            padding: 1px 5px;
+            vertical-align: top;
+            font-size: 11px;
+        }
+
+        .detail-table .label {
+            width: 80px;
+        }
+
+        .detail-table .separator {
+            width: 10px;
+            text-align: center;
+        }
+
+        .signature-section {
+            margin-top: 30px;
+            text-align: right;
+            page-break-inside: avoid;
+        }
+
+        .signature-section p {
+            margin: 2px 0;
+        }
+
+        .signature-space {
+            height: 60px;
+        }
+
+        .tembusan {
+            margin-top: 40px;
+            font-size: 10px;
+        }
+
+        .tembusan p {
+            margin: 1px 0;
+        }
+
+        .underline {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header Surat -->
+        <table class="header-info">
+            <tr>
+                <td class="label">Nomor</td>
+                <td class="separator">:</td>
+                <td class="value">{{ nomor_surat }}</td>
+            </tr>
+            <tr>
+                <td class="label">Lampiran</td>
+                <td class="separator">:</td>
+                <td class="value">1 ( satu ) berkas</td>
+            </tr>
+            <tr>
+                <td class="label">Perihal</td>
+                <td class="separator">:</td>
+                <td class="value bold">Penawaran harga pekerjaan</td>
+            </tr>
+        </table>
+
+        <!-- Penerima -->
+        <div class="recipient">
+            <p>Kepada Yth,</p>
+            <p>PT. Sumber Alfaria Trijaya</p>
+            {% if alamat_toko %}
+            <p>{{ alamat_toko }}</p>
+            {% endif %}
+            <br>
+            <p>Up. Branc Building Development Manager</p>
+        </div>
+
+        <!-- Isi Surat -->
+        <div class="content">
+            <p>Dengan hormat,</p>
+            <p>Setelah membaca dan mempelajari dengan seksama seluruh isi dokumen tender, aanwijzing di kantor dan
+                lapangan dengan ini menyatakan :</p>
+
+            <ol>
+                <li>Akan memenuhi ketentuan dalam rencana kerja dan syarat, termasuk risalah aanwijzing.</li>
+                <li>
+                    Sanggup menyediakan bahan-bahan, peralatan dan tenaga kerja yang diperlukan untuk melaksanakan:
+                    <table class="detail-table">
+                        <tr>
+                            <td class="label">Proyek</td>
+                            <td class="separator">:</td>
+                            <td>{{ proyek }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Pekerjaan</td>
+                            <td class="separator">:</td>
+                            <td>{{ lingkup_pekerjaan }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Lokasi</td>
+                            <td class="separator">:</td>
+                            <td>{{ nama_toko }}</td>
+                        </tr>
+                    </table>
+                    Dan ditenderkan pada hari : {{ tanggal_tender }}, bertempat di {{ alamat_toko or lokasi_tender }}
+                </li>
+                <li>Memahami serta telah memperhitungkan secara seksama kewajiban kami secara teknis dan financial
+                    seperti termaksud dalam RKS dan risalah aanwijzing pada hari {{ tanggal_aanwijzing }} bertempat
+                    sesuai tersebut diatas.</li>
+            </ol>
+
+            <p>Dengan ini kami mengajukan penawaran senilai : <strong>Rp. {{ grand_total_formatted }},-</strong>
+                (<strong>Terbilang</strong> : {{ terbilang }} Rupiah), termasuk overhead, overload daya listrik, Jasa
+                Konstruksi, PPh sesuai dengan perincian harga penawaran tercantum dalam Bill of Quantities.</p>
+
+            <ol start="4">
+                <li>Harga penawaran tersebut adalah fixed (tetap) dengan jangka waktu pelaksanaan Hari kalender sejak
+                    Surat Perintah Kerja dikeluarkan.</li>
+                <li>Pembayaran ditujukan ke Rekening atas nama <strong>{{ nama_pt }}</strong> No. Rek. <strong>{{
+                        no_rekening or '-' }}</strong> {{ nama_bank or '' }}.</li>
+                <li>Kami bersedia menambahkan tenaga kerja lembur proyek dan atau penambahan peralatan, bahan dan tenaga
+                    kerja atas biaya kerja sendiri, apabila dalam masa pelaksanaan terjadi keterlambatan, yang ditandai
+                    dengan prestasi fisik dibawah target prestasi yang ditetapkan dan disetujui pemberi tugas atau
+                    wakilnya.</li>
+                <li>Harga penawaran ini berlaku 15 hari dari tanggal penawaran.</li>
+            </ol>
+        </div>
+
+        <!-- Tanda Tangan -->
+        <div class="signature-section">
+            <p>{{ kota_penandatangan or 'Jakarta' }}, {{ tanggal_surat }}</p>
+            <p><strong>{{ nama_pt }}</strong></p>
+            <div class="signature-space"></div>
+            <p><strong>({{ nama_direktur or '_______________' }})</strong></p>
+            <p>Direktur</p>
+        </div>
+
+        <!-- Tembusan -->
+        <div class="tembusan">
+            <p class="underline">Tembusan :</p>
+            <p>Intern /arsip</p>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -17,7 +17,7 @@ from PyPDF2 import PdfMerger
 
 import config
 from google_services import GoogleServiceProvider
-from pdf_generator import create_pdf_from_data, create_recap_pdf, create_recap_pdf_il, create_pdf_from_data_il
+from pdf_generator import create_pdf_from_data, create_recap_pdf, create_recap_pdf_il, create_pdf_from_data_il, create_surat_penawaran_pdf
 from spk_generator import create_spk_pdf
 from pengawasan_email_logic import get_email_details, FORM_LINKS
 # Tambahkan import ini di bagian paling atas file app.py jika belum ada
@@ -541,11 +541,13 @@ def submit_rab():
 
         # Set status awal & timestamp
         WIB = timezone(timedelta(hours=7))
-        data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_COORDINATOR
+        data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_DIREKTUR_APPROVAL
         data[config.COLUMN_NAMES.TIMESTAMP] = datetime.datetime.now(WIB).isoformat()
 
         # PENTING: Jika Revisi, kita harus MENGOSONGKAN kolom persetujuan lama & alasan penolakan
         # agar flow dimulai dari awal lagi di Google Sheet
+        data[config.COLUMN_NAMES.DIREKTUR_APPROVER] = ""
+        data[config.COLUMN_NAMES.DIREKTUR_APPROVAL_TIME] = ""
         data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = ""
         data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = ""
         data[config.COLUMN_NAMES.MANAGER_APPROVER] = ""
@@ -658,6 +660,20 @@ def submit_rab():
         data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
         data[config.COLUMN_NAMES.LINK_PDF] = link_pdf_merged
         data[config.COLUMN_NAMES.LOKASI] = nomor_ulok_formatted
+
+        # --- 5b) GENERATE PDF SURAT PENAWARAN ---
+        direktur_info = google_provider.get_direktur_info_by_nama_pt(nama_pt_kontraktor)
+        pdf_surat_penawaran_bytes = create_surat_penawaran_pdf(
+            google_provider, data, direktur_info=direktur_info
+        )
+        pdf_surat_penawaran_filename = f"SURAT_PENAWARAN_{jenis_toko}_{nomor_ulok_formatted}.pdf"
+        link_surat_penawaran = google_provider.upload_file_to_drive(
+            pdf_surat_penawaran_bytes,
+            pdf_surat_penawaran_filename,
+            'application/pdf',
+            config.PDF_STORAGE_FOLDER_ID
+        )
+        data[config.COLUMN_NAMES.LINK_SURAT_PENAWARAN] = link_surat_penawaran
 
         # --- 6) SIMPAN KE SHEET ---
         if rejected_row_index:
@@ -1111,7 +1127,11 @@ def handle_rab_approval():
                 print(f"Warning: Could not decode Item_Details_JSON for row {row}")
         
         current_status = row_data.get(config.COLUMN_NAMES.STATUS, "").strip()
-        expected_status_map = {'coordinator': config.STATUS.WAITING_FOR_COORDINATOR, 'manager': config.STATUS.WAITING_FOR_MANAGER}
+        expected_status_map = {
+            'direktur': config.STATUS.WAITING_FOR_DIREKTUR_APPROVAL,
+            'coordinator': config.STATUS.WAITING_FOR_COORDINATOR,
+            'manager': config.STATUS.WAITING_FOR_MANAGER
+        }
         
         if current_status != expected_status_map.get(level):
             msg = f'This action has already been processed. Current status: <strong>{current_status}</strong>.'
@@ -1130,7 +1150,11 @@ def handle_rab_approval():
 
         if action == 'reject':
             new_status = ""
-            if level == 'coordinator':
+            if level == 'direktur':
+                new_status = config.STATUS.REJECTED_BY_DIREKTUR
+                google_provider.update_cell(row, config.COLUMN_NAMES.DIREKTUR_APPROVER, approver)
+                google_provider.update_cell(row, config.COLUMN_NAMES.DIREKTUR_APPROVAL_TIME, current_time)
+            elif level == 'coordinator':
                 new_status = config.STATUS.REJECTED_BY_COORDINATOR
                 google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver)
                 google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME, current_time)
@@ -1163,6 +1187,55 @@ def handle_rab_approval():
                 google_provider.send_email(to=creator_email, subject=subject, html_body=body)
             return render_template('response_page.html', title='Permintaan Ditolak', message='Status permintaan telah diperbarui.', logo_url=logo_url)
 
+        elif level == 'direktur' and action == 'approve':
+            # DIREKTUR menyetujui → forward ke KOORDINATOR
+            google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_COORDINATOR)
+            google_provider.update_cell(row, config.COLUMN_NAMES.DIREKTUR_APPROVER, approver)
+            google_provider.update_cell(row, config.COLUMN_NAMES.DIREKTUR_APPROVAL_TIME, current_time)
+            log_app("handle_rab_approval", "approved by direktur", row=row, approver=approver)
+            
+            # Ambil email Koordinator berdasarkan cabang
+            coordinator_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.KOORDINATOR)
+            if coordinator_emails:
+                row_data[config.COLUMN_NAMES.DIREKTUR_APPROVER] = approver
+                row_data[config.COLUMN_NAMES.DIREKTUR_APPROVAL_TIME] = current_time
+                
+                base_url = "https://sparta-backend-5hdj.onrender.com"
+                approver_for_link = coordinator_emails[0]
+                approval_url_coord = f"{base_url}/api/handle_rab_approval?action=approve&row={row}&level=coordinator&approver={approver_for_link}"
+                rejection_url_coord = f"{base_url}/api/reject_form/rab?row={row}&level=coordinator&approver={approver_for_link}"
+                
+                # Ambil nomor ulok dan lingkup untuk gantt URL
+                nomor_ulok_dir = row_data.get(config.COLUMN_NAMES.LOKASI, '')
+                lingkup_dir = row_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, '')
+                gantt_url = f"https://sparta-alfamart.vercel.app/gantt/view.html?ulok={nomor_ulok_dir}&lingkup={lingkup_dir}&locked=true"
+                
+                # Render email template dengan gantt chart untuk Koordinator
+                email_html_coord = render_template(
+                    'email_template_gantt.html',
+                    doc_type="RAB",
+                    level='Koordinator',
+                    form_data=row_data,
+                    approval_url=approval_url_coord,
+                    rejection_url=rejection_url_coord,
+                    gantt_url=gantt_url,
+                    additional_info=f"Telah disetujui oleh Direktur: {approver}"
+                )
+                
+                # Generate PDF attachment
+                pdf_nonsbo_bytes = create_pdf_from_data(google_provider, row_data, exclude_sbo=True)
+                pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
+                pdf_merged_bytes = merge_pdf_bytes([pdf_nonsbo_bytes, pdf_recap_bytes])
+                pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+                
+                google_provider.send_email(
+                    to=coordinator_emails,
+                    subject=f"[TAHAP 2: PERLU PERSETUJUAN KOORDINATOR] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                    html_body=email_html_coord,
+                    attachments=[(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
+                )
+            return render_template('response_page.html', title='Persetujuan Diteruskan', message='Terima kasih. Persetujuan Direktur telah dicatat dan diteruskan ke Koordinator.', logo_url=logo_url)
+
         elif level == 'coordinator' and action == 'approve':
             google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_MANAGER)
             google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver)
@@ -1184,11 +1257,11 @@ def handle_rab_approval():
                 pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
                 google_provider.send_email(
                     manager_email,
-                    f"[TAHAP 2: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                    f"[TAHAP 3: PERLU PERSETUJUAN MANAJER] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
                     email_html_manager,
                     attachments=[(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
                 )
-            return render_template('response_page.html', title='Persetujuan Diteruskan', message='Terima kasih. Persetujuan Anda telah dicatat.', logo_url=logo_url)
+            return render_template('response_page.html', title='Persetujuan Diteruskan', message='Terima kasih. Persetujuan Koordinator telah dicatat dan diteruskan ke Manajer.', logo_url=logo_url)
         
         elif level == 'manager' and action == 'approve':
             google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED)
@@ -1761,7 +1834,7 @@ def insert_gantt_data():
         log_app("insert_gantt_data", "insert result", success=result.get("success"), row_index=result.get("row_index"))
         
         if result["success"]:
-            # --- CEK STATUS "Terkunci" DAN KIRIM EMAIL KE KOORDINATOR ---
+            # --- CEK STATUS "Terkunci" DAN KIRIM EMAIL KE DIREKTUR ---
             status_request = data.get(config.COLUMN_NAMES.STATUS, "").strip()
             
             if status_request.lower() == "terkunci":
@@ -1772,108 +1845,126 @@ def insert_gantt_data():
                     if not rab_data:
                         print(f"⚠️ Data RAB tidak ditemukan untuk Ulok: {nomor_ulok}, Lingkup: {lingkup}")
                     else:
-                        cabang = rab_data.get(config.COLUMN_NAMES.CABANG, "") or rab_data.get('Cabang', '')
-                        
-                        if not cabang:
-                            print(f"⚠️ Field 'Cabang' tidak ditemukan di data RAB untuk Ulok: {nomor_ulok}")
+                        # Validasi: hanya kirim email jika RAB masih WAITING_FOR_DIREKTUR_APPROVAL
+                        rab_status = rab_data.get(config.COLUMN_NAMES.STATUS, "").strip()
+                        if rab_status != config.STATUS.WAITING_FOR_DIREKTUR_APPROVAL:
+                            print(f"⚠️ RAB status adalah '{rab_status}', bukan Menunggu Persetujuan Direktur. Skip kirim email.")
                         else:
-                            # Ambil email Koordinator berdasarkan cabang
-                            coordinator_emails = google_provider.get_emails_by_jabatan(
-                                cabang,
-                                config.JABATAN.KOORDINATOR
-                            )
-                            
-                            if not coordinator_emails:
-                                print(f"⚠️ Tidak ada email Koordinator untuk cabang: {cabang}")
+                            cabang = rab_data.get(config.COLUMN_NAMES.CABANG, "") or rab_data.get('Cabang', '')
+                            nama_pt_kontraktor = rab_data.get(config.COLUMN_NAMES.NAMA_PT, "") or rab_data.get('Nama_PT', '')
+                        
+                            if not cabang:
+                                print(f"⚠️ Field 'Cabang' tidak ditemukan di data RAB untuk Ulok: {nomor_ulok}")
+                            elif not nama_pt_kontraktor:
+                                print(f"⚠️ Field 'Nama_PT' tidak ditemukan di data RAB untuk Ulok: {nomor_ulok}")
                             else:
-                                # Ambil informasi dari RAB untuk email
-                                nama_toko = rab_data.get(config.COLUMN_NAMES.NAMA_TOKO, "") or rab_data.get('Nama_Toko', 'N/A')
-                                jenis_toko = rab_data.get(config.COLUMN_NAMES.PROYEK, "") or rab_data.get('Proyek', 'N/A')
-                                lingkup_pekerjaan = rab_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "") or lingkup
+                                # Ambil email DIREKTUR berdasarkan NAMA_PT
+                                direktur_email = google_provider.get_direktur_email_by_nama_pt(nama_pt_kontraktor)
+                            
+                                if not direktur_email:
+                                    print(f"⚠️ Tidak ada email Direktur untuk Nama_PT: {nama_pt_kontraktor}")
+                                else:
+                                    # Ambil informasi dari RAB untuk email
+                                    nama_toko = rab_data.get(config.COLUMN_NAMES.NAMA_TOKO, "") or rab_data.get('Nama_Toko', 'N/A')
+                                    jenis_toko = rab_data.get(config.COLUMN_NAMES.PROYEK, "") or rab_data.get('Proyek', 'N/A')
+                                    lingkup_pekerjaan = rab_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "") or lingkup
                                 
-                                # Format nomor ulok untuk display
-                                nomor_ulok_display = format_ulok(nomor_ulok)
+                                    # Format nomor ulok untuk display
+                                    nomor_ulok_display = format_ulok(nomor_ulok)
                                 
-                                # Ambil link PDF dari data RAB
-                                link_pdf_merged = rab_data.get(config.COLUMN_NAMES.LINK_PDF, '')
-                                link_pdf_nonsbo = rab_data.get(config.COLUMN_NAMES.LINK_PDF_NONSBO, '')
-                                link_pdf_rekap = rab_data.get(config.COLUMN_NAMES.LINK_PDF_REKAP, '')
+                                    # Ambil link PDF dari data RAB
+                                    link_pdf_merged = rab_data.get(config.COLUMN_NAMES.LINK_PDF, '')
+                                    link_pdf_nonsbo = rab_data.get(config.COLUMN_NAMES.LINK_PDF_NONSBO, '')
+                                    link_pdf_rekap = rab_data.get(config.COLUMN_NAMES.LINK_PDF_REKAP, '')
+                                    link_surat_penawaran = rab_data.get(config.COLUMN_NAMES.LINK_SURAT_PENAWARAN, '')
                                 
-                                # Siapkan attachment - download file dari Drive
-                                # download_file_from_link returns (filename, bytes, mimetype)
-                                attachments = []
+                                    # Siapkan attachment - download file dari Drive
+                                    attachments = []
 
-                                if link_pdf_merged:
-                                    try:
-                                        downloaded = google_provider.download_file_from_link(link_pdf_merged)
-                                        if downloaded and downloaded[1]:
-                                            _, file_bytes, _ = downloaded
-                                            pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{nomor_ulok_display}.pdf"
-                                            attachments.append((pdf_merged_filename, file_bytes, 'application/pdf'))
-                                    except Exception as e:
-                                        print(f"⚠️ Gagal download PDF Gabungan: {e}")
-                                
-                                if not attachments and link_pdf_nonsbo:
-                                    try:
-                                        downloaded = google_provider.download_file_from_link(link_pdf_nonsbo)
-                                        if downloaded and downloaded[1]:  # (filename, bytes, mimetype)
-                                            orig_filename, file_bytes, mime_type = downloaded
-                                            pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{nomor_ulok_display}.pdf"
-                                            attachments.append((pdf_nonsbo_filename, file_bytes, 'application/pdf'))
-                                    except Exception as e:
-                                        print(f"⚠️ Gagal download PDF Non-SBO: {e}")
-                                
-                                if not attachments and link_pdf_rekap:
-                                    try:
-                                        downloaded = google_provider.download_file_from_link(link_pdf_rekap)
-                                        if downloaded and downloaded[1]:  # (filename, bytes, mimetype)
-                                            orig_filename, file_bytes, mime_type = downloaded
-                                            pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{nomor_ulok_display}.pdf"
-                                            attachments.append((pdf_recap_filename, file_bytes, 'application/pdf'))
-                                    except Exception as e:
-                                        print(f"⚠️ Gagal download PDF Rekap: {e}")
-                                
-                                # Tambahkan Status Terkunci ke rab_data untuk ditampilkan di template
-                                rab_data[config.COLUMN_NAMES.STATUS] = "Terkunci"
-                                
-                                # Buat approval_url dan rejection_url sama seperti submit_rab()
-                                base_url = "https://sparta-backend-5hdj.onrender.com"
-                                approver_for_link = coordinator_emails[0]
-                                approval_url = (
-                                    f"{base_url}/api/handle_rab_approval"
-                                    f"?action=approve&row={rab_row_index}"
-                                    f"&level=coordinator&approver={approver_for_link}"
-                                )
-                                rejection_url = (
-                                    f"{base_url}/api/reject_form/rab"
-                                    f"?row={rab_row_index}&level=coordinator"
-                                    f"&approver={approver_for_link}"
-                                )
+                                    # 1) Download Surat Penawaran PDF
+                                    if link_surat_penawaran:
+                                        try:
+                                            downloaded = google_provider.download_file_from_link(link_surat_penawaran)
+                                            if downloaded and downloaded[1]:
+                                                _, file_bytes, _ = downloaded
+                                                pdf_sp_filename = f"SURAT_PENAWARAN_{jenis_toko}_{nomor_ulok_display}.pdf"
+                                                attachments.append((pdf_sp_filename, file_bytes, 'application/pdf'))
+                                        except Exception as e:
+                                            print(f"⚠️ Gagal download PDF Surat Penawaran: {e}")
 
-                                gantt_url = (
-                                    f"https://sparta-alfamart.vercel.app/gantt/view.html?ulok={nomor_ulok}&lingkup={lingkup}&locked=true"
-                                )
+                                    # 2) Download Rekap RAB PDF
+                                    if link_pdf_rekap:
+                                        try:
+                                            downloaded = google_provider.download_file_from_link(link_pdf_rekap)
+                                            if downloaded and downloaded[1]:
+                                                _, file_bytes, _ = downloaded
+                                                pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{nomor_ulok_display}.pdf"
+                                                attachments.append((pdf_recap_filename, file_bytes, 'application/pdf'))
+                                        except Exception as e:
+                                            print(f"⚠️ Gagal download PDF Rekap: {e}")
+
+                                    # 3) Download PDF Non-SBO (pdf_report)
+                                    if link_pdf_nonsbo:
+                                        try:
+                                            downloaded = google_provider.download_file_from_link(link_pdf_nonsbo)
+                                            if downloaded and downloaded[1]:
+                                                _, file_bytes, _ = downloaded
+                                                pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{nomor_ulok_display}.pdf"
+                                                attachments.append((pdf_nonsbo_filename, file_bytes, 'application/pdf'))
+                                        except Exception as e:
+                                            print(f"⚠️ Gagal download PDF Non-SBO: {e}")
+
+                                    # Fallback: jika tidak ada attachment individual, coba merged
+                                    if not attachments and link_pdf_merged:
+                                        try:
+                                            downloaded = google_provider.download_file_from_link(link_pdf_merged)
+                                            if downloaded and downloaded[1]:
+                                                _, file_bytes, _ = downloaded
+                                                pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{nomor_ulok_display}.pdf"
+                                                attachments.append((pdf_merged_filename, file_bytes, 'application/pdf'))
+                                        except Exception as e:
+                                            print(f"⚠️ Gagal download PDF Gabungan: {e}")
                                 
-                                # Render email template sama seperti submit_rab()
-                                email_html = render_template(
-                                    'email_template_gantt.html',
-                                    doc_type="RAB",
-                                    level='Koordinator',
-                                    form_data=rab_data,
-                                    approval_url=approval_url,
-                                    rejection_url=rejection_url,
-                                    gantt_url=gantt_url
-                                )
+                                    # Tambahkan Status Terkunci ke rab_data untuk ditampilkan di template
+                                    rab_data[config.COLUMN_NAMES.STATUS] = "Terkunci"
                                 
-                                # Kirim email ke Koordinator
-                                google_provider.send_email(
-                                    to=coordinator_emails,
-                                    subject=f"[TAHAP 1: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
-                                    html_body=email_html,
-                                    attachments=attachments if attachments else None
-                                )
+                                    # Buat approval_url dan rejection_url untuk DIREKTUR
+                                    base_url = "https://sparta-backend-5hdj.onrender.com"
+                                    approval_url = (
+                                        f"{base_url}/api/handle_rab_approval"
+                                        f"?action=approve&row={rab_row_index}"
+                                        f"&level=direktur&approver={direktur_email}"
+                                    )
+                                    rejection_url = (
+                                        f"{base_url}/api/reject_form/rab"
+                                        f"?row={rab_row_index}&level=direktur"
+                                        f"&approver={direktur_email}"
+                                    )
+
+                                    gantt_url = (
+                                        f"https://sparta-alfamart.vercel.app/gantt/view.html?ulok={nomor_ulok}&lingkup={lingkup}&locked=true"
+                                    )
                                 
-                                log_app("insert_gantt_data", "locked email sent", recipients=len(coordinator_emails))
+                                    # Render email template untuk Direktur (dengan gantt chart)
+                                    email_html = render_template(
+                                        'direktur_email_template.html',
+                                        doc_type="RAB",
+                                        level='Direktur',
+                                        form_data=rab_data,
+                                        approval_url=approval_url,
+                                        rejection_url=rejection_url,
+                                        gantt_url=gantt_url
+                                    )
+                                
+                                    # Kirim email ke Direktur
+                                    google_provider.send_email(
+                                        to=[direktur_email],
+                                        subject=f"[TAHAP 1: PERLU PERSETUJUAN DIREKTUR] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                                        html_body=email_html,
+                                        attachments=attachments if attachments else None
+                                    )
+                                
+                                    log_app("insert_gantt_data", "locked email sent to direktur", recipients=1, email=direktur_email)
                         
                 except Exception as email_error:
                     # Jangan gagalkan operasi utama jika email gagal

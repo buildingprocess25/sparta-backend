@@ -87,11 +87,15 @@ class COLUMN_NAMES:
     CABANG = "Cabang"
     NAMA_PT = "Nama_PT"
     LINGKUP_PEKERJAAN = "Lingkup_Pekerjaan"
+    DIREKTUR_APPROVER = "Pemberi Persetujuan Direktur"
+    DIREKTUR_APPROVAL_TIME = "Waktu Persetujuan Direktur"
     KOORDINATOR_APPROVER = "Pemberi Persetujuan Koordinator"
     KOORDINATOR_APPROVAL_TIME = "Waktu Persetujuan Koordinator"
     MANAGER_APPROVER = "Pemberi Persetujuan Manager"
     MANAGER_APPROVAL_TIME = "Waktu Persetujuan Manager"
     LINK_PDF = "Link PDF"
+    LINK_SURAT_PENAWARAN = "Link Surat Penawaran"
+    LOGO = "Logo"
     LINK_PDF_NONSBO = "Link PDF Non-SBO"
     LINK_PDF_REKAP = "Link PDF Rekapitulasi"
     GRAND_TOTAL = "Grand Total"
@@ -124,9 +128,12 @@ class JABATAN:
     MANAGER = "BRANCH BUILDING & MAINTENANCE MANAGER"
     BRANCH_MANAGER = "BRANCH MANAGER"
     KONTRAKTOR = "KONTRAKTOR"
+    DIREKTUR = "DIREKTUR"
 
 class STATUS:
     # Status RAB
+    WAITING_FOR_DIREKTUR_APPROVAL = "Menunggu Persetujuan Direktur"
+    REJECTED_BY_DIREKTUR = "Ditolak oleh Direktur"
     WAITING_FOR_COORDINATOR = "Menunggu Persetujuan Koordinator"
     REJECTED_BY_COORDINATOR = "Ditolak oleh Koordinator"
     WAITING_FOR_MANAGER = "Menunggu Persetujuan Manajer"
