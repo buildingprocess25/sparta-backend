@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- Google & Spreadsheet Configuration ---
+# --- Google & Spreadsheet Configuration ----
 
 # Data form sheet
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1LA1TlhgltT2bqSN3H-LYasq9PtInVlqq98VPru8txoo")
