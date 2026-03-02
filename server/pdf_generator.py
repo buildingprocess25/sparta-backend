@@ -15,17 +15,42 @@ except locale.Error:
     except locale.Error:
         print("Peringatan: Locale Bahasa Indonesia tidak ditemukan. Nama bulan akan dalam Bahasa Inggris.")
 
-def get_nama_lengkap_by_email(google_provider, email):
-    if not email: return ""
+def get_nama_lengkap_by_email(google_provider, email, cabang=None, expected_jabatan=None):
+    if not email:
+        return ""
+
+    normalized_email = str(email).strip().lower()
+    normalized_cabang = str(cabang).strip().lower() if cabang else None
+    normalized_jabatan = str(expected_jabatan).strip().upper() if expected_jabatan else None
+    fallback_name = ""
+
     try:
         cabang_sheet = google_provider.sheet.worksheet(config.CABANG_SHEET_NAME)
         records = cabang_sheet.get_all_records()
+
         for record in records:
-            if str(record.get('EMAIL_SAT', '')).strip().lower() == str(email).strip().lower():
-                return record.get('NAMA LENGKAP', '').strip()
+            record_email = str(record.get('EMAIL_SAT', '')).strip().lower()
+            if record_email != normalized_email:
+                continue
+
+            record_name = str(record.get('NAMA LENGKAP', '')).strip()
+            record_cabang = str(record.get('CABANG', '')).strip().lower()
+            record_jabatan = str(record.get('JABATAN', '')).strip().upper()
+
+            if not fallback_name:
+                fallback_name = record_name
+
+            if normalized_cabang and record_cabang != normalized_cabang:
+                continue
+
+            if normalized_jabatan and record_jabatan != normalized_jabatan:
+                continue
+
+            return record_name
     except Exception as e:
         print(f"Error getting name for email {email}: {e}")
-    return ""
+
+    return fallback_name
 
 def get_nama_pt_by_cabang(google_provider, cabang):
     if not cabang: return ""
@@ -115,8 +140,13 @@ def normalize_pdf_template_fields(template_data):
 
     return template_data
 
-def create_approval_details_block(google_provider, approver_email, approval_time_str):
-    approver_name = get_nama_lengkap_by_email(google_provider, approver_email)
+def create_approval_details_block(google_provider, approver_email, approval_time_str, cabang=None, expected_jabatan=None):
+    approver_name = get_nama_lengkap_by_email(
+        google_provider,
+        approver_email,
+        cabang=cabang,
+        expected_jabatan=expected_jabatan
+    )
     
     approval_dt = parse_flexible_timestamp(approval_time_str)
 
@@ -220,6 +250,8 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
     # Grand Total Final
     final_grand_total = pembulatan + ppn
     
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
     creator_details = ""
     creator_email = form_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
     creator_timestamp = form_data.get(config.COLUMN_NAMES.TIMESTAMP)
@@ -227,21 +259,26 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
         creator_details = create_approval_details_block(
             google_provider,
             creator_email,
-            creator_timestamp
+            creator_timestamp,
+            cabang=form_cabang
         )
 
     coordinator_approval_details = ""
     if form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVER):
         coordinator_approval_details = create_approval_details_block(
             google_provider, form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVER),
-            form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME)
+            form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME),
+            cabang=form_cabang,
+            expected_jabatan=config.JABATAN.KOORDINATOR
         )
 
     manager_approval_details = ""
     if form_data.get(config.COLUMN_NAMES.MANAGER_APPROVER):
         manager_approval_details = create_approval_details_block(
             google_provider, form_data.get(config.COLUMN_NAMES.MANAGER_APPROVER),
-            form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME)
+            form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME),
+            cabang=form_cabang,
+            expected_jabatan=config.JABATAN.MANAGER
         )
     
     tanggal_pengajuan_str = ''
@@ -385,6 +422,8 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
     # Grand Total Final
     final_grand_total = pembulatan + ppn
     
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
     creator_details = ""
     creator_email = form_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
     creator_timestamp = form_data.get(config.COLUMN_NAMES.TIMESTAMP)
@@ -392,21 +431,26 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
         creator_details = create_approval_details_block(
             google_provider,
             creator_email,
-            creator_timestamp
+            creator_timestamp,
+            cabang=form_cabang
         )
 
     coordinator_approval_details = ""
     if form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVER):
         coordinator_approval_details = create_approval_details_block(
             google_provider, form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVER),
-            form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME)
+            form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME),
+            cabang=form_cabang,
+            expected_jabatan=config.JABATAN.KOORDINATOR
         )
 
     manager_approval_details = ""
     if form_data.get(config.COLUMN_NAMES.MANAGER_APPROVER):
         manager_approval_details = create_approval_details_block(
             google_provider, form_data.get(config.COLUMN_NAMES.MANAGER_APPROVER),
-            form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME)
+            form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME),
+            cabang=form_cabang,
+            expected_jabatan=config.JABATAN.MANAGER
         )
     
     tanggal_pengajuan_str = ''
@@ -464,11 +508,16 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
 
 
 # TAMBAHKAN ATAU VERIFIKASI FUNGSI INI:
-def get_approval_details_html(google_provider, approver_email, approval_time_str):
+def get_approval_details_html(google_provider, approver_email, approval_time_str, cabang=None, expected_jabatan=None):
     if not approver_email:
         return ""
     
-    approver_name = get_nama_lengkap_by_email(google_provider, approver_email)
+    approver_name = get_nama_lengkap_by_email(
+        google_provider,
+        approver_email,
+        cabang=cabang,
+        expected_jabatan=expected_jabatan
+    )
     approval_dt = parse_flexible_timestamp(approval_time_str)
     
     # Perbaikan: Waktu ditampilkan hanya jika parsing berhasil
@@ -573,20 +622,27 @@ def create_recap_pdf(google_provider, form_data):
     
     # Ambil detail persetujuan (sama seperti di create_pdf_from_data)
     # Catatan: Fungsi get_approval_details_html harus sudah ada di file ini.
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
     creator_details = get_approval_details_html(
         google_provider, 
         form_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT), 
-        form_data.get(config.COLUMN_NAMES.TIMESTAMP)
+        form_data.get(config.COLUMN_NAMES.TIMESTAMP),
+        cabang=form_cabang
     )
     coordinator_approval_details = get_approval_details_html(
         google_provider, 
         form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVER), 
-        form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME)
+        form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME),
+        cabang=form_cabang,
+        expected_jabatan=config.JABATAN.KOORDINATOR
     )
     manager_approval_details = get_approval_details_html(
         google_provider, 
         form_data.get(config.COLUMN_NAMES.MANAGER_APPROVER), 
-        form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME)
+        form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME),
+        cabang=form_cabang,
+        expected_jabatan=config.JABATAN.MANAGER
     )
     
     tanggal_pengajuan_str = ''
@@ -734,20 +790,27 @@ def create_recap_pdf_il(google_provider, form_data):
     
     # Ambil detail persetujuan (sama seperti di create_pdf_from_data)
     # Catatan: Fungsi get_approval_details_html harus sudah ada di file ini.
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
     creator_details = get_approval_details_html(
         google_provider, 
         form_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT), 
-        form_data.get(config.COLUMN_NAMES.TIMESTAMP)
+        form_data.get(config.COLUMN_NAMES.TIMESTAMP),
+        cabang=form_cabang
     )
     coordinator_approval_details = get_approval_details_html(
         google_provider, 
         form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVER), 
-        form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME)
+        form_data.get(config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME),
+        cabang=form_cabang,
+        expected_jabatan=config.JABATAN.KOORDINATOR
     )
     manager_approval_details = get_approval_details_html(
         google_provider, 
         form_data.get(config.COLUMN_NAMES.MANAGER_APPROVER), 
-        form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME)
+        form_data.get(config.COLUMN_NAMES.MANAGER_APPROVAL_TIME),
+        cabang=form_cabang,
+        expected_jabatan=config.JABATAN.MANAGER
     )
     
     tanggal_pengajuan_str = ''

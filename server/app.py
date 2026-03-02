@@ -953,20 +953,6 @@ def submit_rab_kedua():
             raise Exception(f"Tidak ada email Koordinator untuk cabang '{cabang}'.")
 
         base_url = "https://sparta-backend-5hdj.onrender.com"
-        approver_for_link = coordinator_emails[0]
-        
-        # Arahkan ke handler approval RAB 2
-        approval_url = f"{base_url}/api/handle_rab_2_approval?action=approve&row={new_row_index}&level=coordinator&approver={approver_for_link}"
-        rejection_url = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={new_row_index}&level=coordinator&approver={approver_for_link}"
-
-        email_html = render_template(
-            'email_template.html',
-            doc_type="RAB",
-            level='Koordinator',
-            form_data=data,
-            approval_url=approval_url,
-            rejection_url=rejection_url
-        )
 
         attachments_list = [
             (pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'),
@@ -976,12 +962,25 @@ def submit_rab_kedua():
         if file_pdf_IL_upload and link_pdf_IL:
              attachments_list.append((manual_filename, manual_file_bytes, file_pdf_IL_upload.content_type))
 
-        google_provider.send_email(
-            to=coordinator_emails,
-            subject=f"[TAHAP 1: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}",
-            html_body=email_html,
-            attachments=attachments_list
-        )
+        for coordinator_email in coordinator_emails:
+            approval_url = f"{base_url}/api/handle_rab_2_approval?action=approve&row={new_row_index}&level=coordinator&approver={coordinator_email}"
+            rejection_url = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={new_row_index}&level=coordinator&approver={coordinator_email}"
+
+            email_html = render_template(
+                'email_template.html',
+                doc_type="RAB",
+                level='Koordinator',
+                form_data=data,
+                approval_url=approval_url,
+                rejection_url=rejection_url
+            )
+
+            google_provider.send_email(
+                to=coordinator_email,
+                subject=f"[TAHAP 1: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}",
+                html_body=email_html,
+                attachments=attachments_list
+            )
 
         log_app("submit_rab_kedua", "success", row=new_row_index, cabang=cabang, email_count=len(coordinator_emails))
 
@@ -1176,27 +1175,30 @@ def handle_rab_approval():
                 raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row}")
 
             log_app("handle_rab_approval", "approved by coordinator", row=row, approver=approver)
-            manager_email = google_provider.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
-            if manager_email:
+            manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
+            if manager_emails:
                 row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_MANAGER
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = current_time
                 base_url = "https://sparta-backend-5hdj.onrender.com"
-                approval_url_manager = f"{base_url}/api/handle_rab_approval?action=approve&row={row}&level=manager&approver={manager_email}"
-                rejection_url_manager = f"{base_url}/api/reject_form/rab?row={row}&level=manager&approver={manager_email}"
-                email_html_manager = render_template('email_template.html', doc_type="RAB", level='Manajer', form_data=row_data, approval_url=approval_url_manager, rejection_url=rejection_url_manager, additional_info=f"Telah disetujui oleh Koordinator: {approver}")
+
                 pdf_nonsbo_bytes = create_pdf_from_data(google_provider, row_data, exclude_sbo=True)
                 pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
                 pdf_merged_bytes = merge_pdf_bytes([pdf_nonsbo_bytes, pdf_recap_bytes])
                 pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
                 pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
                 pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
-                google_provider.send_email(
-                    manager_email,
-                    f"[TAHAP 2: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
-                    email_html_manager,
-                    attachments=[(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
-                )
+
+                for manager_email in manager_emails:
+                    approval_url_manager = f"{base_url}/api/handle_rab_approval?action=approve&row={row}&level=manager&approver={manager_email}"
+                    rejection_url_manager = f"{base_url}/api/reject_form/rab?row={row}&level=manager&approver={manager_email}"
+                    email_html_manager = render_template('email_template.html', doc_type="RAB", level='Manajer', form_data=row_data, approval_url=approval_url_manager, rejection_url=rejection_url_manager, additional_info=f"Telah disetujui oleh Koordinator: {approver}")
+                    google_provider.send_email(
+                        manager_email,
+                        f"[TAHAP 2: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                        email_html_manager,
+                        attachments=[(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
+                    )
             return render_template('response_page.html', title='Persetujuan Diteruskan', message='Terima kasih. Persetujuan Anda telah dicatat.', logo_url=logo_url)
         
         elif level == 'manager' and action == 'approve':
@@ -1380,24 +1382,11 @@ def handle_rab_2_approval():
 
                 # 3. Cari Email Manager
                 cabang = row_data.get('Cabang')
-                manager_email = google_provider.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
+                manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
                 
-                if manager_email:
+                if manager_emails:
                     base_url = "https://sparta-backend-5hdj.onrender.com" 
-                    approval_url_manager = f"{base_url}/api/handle_rab_2_approval?action=approve&row={row}&level=manager&approver={manager_email}"
-                    rejection_url_manager = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={row}&level=manager&approver={manager_email}"
-                    
-                    # 4. Render Email HTML
-                    email_html_manager = render_template(
-                        'email_template.html', 
-                        doc_type="RAB", 
-                        level='Manajer', 
-                        form_data=row_data, 
-                        approval_url=approval_url_manager,
-                        rejection_url=rejection_url_manager, 
-                        additional_info=f"Telah disetujui oleh Koordinator: {approver}"
-                    )
-                    
+
                     # 5. Generate PDF Otomatis
                     jenis_toko = row_data.get('Proyek', 'N/A')
                     nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
@@ -1421,13 +1410,27 @@ def handle_rab_2_approval():
                         if m_name and m_bytes:
                             final_attachments.append((m_name, m_bytes, m_type))
 
-                    # 7. Kirim Email
-                    google_provider.send_email(
-                        manager_email, 
-                        f"[TAHAP 2: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}", 
-                        email_html_manager, 
-                        attachments=final_attachments
-                    )
+                    # 7. Kirim Email (personalized link per manager)
+                    for manager_email in manager_emails:
+                        approval_url_manager = f"{base_url}/api/handle_rab_2_approval?action=approve&row={row}&level=manager&approver={manager_email}"
+                        rejection_url_manager = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={row}&level=manager&approver={manager_email}"
+
+                        email_html_manager = render_template(
+                            'email_template.html', 
+                            doc_type="RAB", 
+                            level='Manajer', 
+                            form_data=row_data, 
+                            approval_url=approval_url_manager,
+                            rejection_url=rejection_url_manager, 
+                            additional_info=f"Telah disetujui oleh Koordinator: {approver}"
+                        )
+
+                        google_provider.send_email(
+                            manager_email, 
+                            f"[TAHAP 2: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}", 
+                            email_html_manager, 
+                            attachments=final_attachments
+                        )
                 
                 return render_template('response_page.html', title='Sukses', message='Disetujui Koordinator (IL)', logo_url=logo_url)
 
@@ -1860,42 +1863,40 @@ def insert_gantt_data():
                                 # Tambahkan Status Terkunci ke rab_data untuk ditampilkan di template
                                 rab_data[config.COLUMN_NAMES.STATUS] = "Terkunci"
                                 
-                                # Buat approval_url dan rejection_url sama seperti submit_rab()
-                                base_url = "https://sparta-backend-5hdj.onrender.com"
-                                approver_for_link = coordinator_emails[0]
-                                approval_url = (
-                                    f"{base_url}/api/handle_rab_approval"
-                                    f"?action=approve&row={rab_row_index}"
-                                    f"&level=coordinator&approver={approver_for_link}"
-                                )
-                                rejection_url = (
-                                    f"{base_url}/api/reject_form/rab"
-                                    f"?row={rab_row_index}&level=coordinator"
-                                    f"&approver={approver_for_link}"
-                                )
-
                                 gantt_url = (
                                     f"https://sparta-alfamart.vercel.app/gantt/view.html?ulok={nomor_ulok}&lingkup={lingkup}&locked=true"
                                 )
-                                
-                                # Render email template sama seperti submit_rab()
-                                email_html = render_template(
-                                    'email_template_gantt.html',
-                                    doc_type="RAB",
-                                    level='Koordinator',
-                                    form_data=rab_data,
-                                    approval_url=approval_url,
-                                    rejection_url=rejection_url,
-                                    gantt_url=gantt_url
-                                )
-                                
-                                # Kirim email ke Koordinator
-                                google_provider.send_email(
-                                    to=coordinator_emails,
-                                    subject=f"[TAHAP 1: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
-                                    html_body=email_html,
-                                    attachments=attachments if attachments else None
-                                )
+
+                                base_url = "https://sparta-backend-5hdj.onrender.com"
+
+                                for coordinator_email in coordinator_emails:
+                                    approval_url = (
+                                        f"{base_url}/api/handle_rab_approval"
+                                        f"?action=approve&row={rab_row_index}"
+                                        f"&level=coordinator&approver={coordinator_email}"
+                                    )
+                                    rejection_url = (
+                                        f"{base_url}/api/reject_form/rab"
+                                        f"?row={rab_row_index}&level=coordinator"
+                                        f"&approver={coordinator_email}"
+                                    )
+
+                                    email_html = render_template(
+                                        'email_template_gantt.html',
+                                        doc_type="RAB",
+                                        level='Koordinator',
+                                        form_data=rab_data,
+                                        approval_url=approval_url,
+                                        rejection_url=rejection_url,
+                                        gantt_url=gantt_url
+                                    )
+
+                                    google_provider.send_email(
+                                        to=coordinator_email,
+                                        subject=f"[TAHAP 1: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                                        html_body=email_html,
+                                        attachments=attachments if attachments else None
+                                    )
                                 
                                 log_app("insert_gantt_data", "locked email sent", recipients=len(coordinator_emails))
                         
