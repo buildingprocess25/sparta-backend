@@ -227,6 +227,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
             )
 
     logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Alfamart-Emblem.png'))
+    watermark_logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Building-Logo.png'))
 
     # Kita ambil langsung dari form_data karena app.py sudah memasukkannya
     nama_pt_found = form_data.get(config.COLUMN_NAMES.NAMA_PT)
@@ -244,6 +245,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
         ppn=format_rupiah(ppn),
         final_grand_total=format_rupiah(final_grand_total), 
         logo_path=logo_path,
+        watermark_logo_path=watermark_logo_path,
         JABATAN=config.JABATAN,
         creator_details=creator_details,
         coordinator_approval_details=coordinator_approval_details,
@@ -389,6 +391,7 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
             )
 
     logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Alfamart-Emblem.png'))
+    watermark_logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Building-Logo.png'))
 
     # Kita ambil langsung dari form_data karena app.py sudah memasukkannya
     nama_pt_found = form_data.get(config.COLUMN_NAMES.NAMA_PT)
@@ -580,6 +583,7 @@ def create_recap_pdf(google_provider, form_data):
         'recap_report.html',  # <-- Template HTML baru
         data=template_data,
         logo_path=logo_path,
+        watermark_logo_path=watermark_logo_path,
         JABATAN=config.JABATAN,
         creator_details=creator_details,
         coordinator_approval_details=coordinator_approval_details,
