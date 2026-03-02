@@ -74,6 +74,47 @@ def parse_flexible_timestamp(ts_string):
     
     return None
 
+def _get_first_non_empty_value(data, possible_keys):
+    for key in possible_keys:
+        if key not in data:
+            continue
+        value = data.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+def normalize_pdf_template_fields(template_data):
+    field_aliases = {
+        config.COLUMN_NAMES.DURASI_PEKERJAAN: [
+            config.COLUMN_NAMES.DURASI_PEKERJAAN,
+            "Durasi Pekerjaan",
+            "durasi_pekerjaan",
+            "durasiPekerjaan",
+            "DurasiPekerjaan",
+            "Durasi"
+        ],
+        config.COLUMN_NAMES.KATEGORI_LOKASI: [
+            config.COLUMN_NAMES.KATEGORI_LOKASI,
+            "Kategori Lokasi",
+            "kategori_lokasi",
+            "kategoriLokasi",
+            "KategoriLokasi",
+            "Kategori"
+        ]
+    }
+
+    for target_key, alias_keys in field_aliases.items():
+        current_value = template_data.get(target_key)
+        if current_value is None or (isinstance(current_value, str) and not current_value.strip()):
+            normalized_value = _get_first_non_empty_value(template_data, alias_keys)
+            if normalized_value is not None:
+                template_data[target_key] = normalized_value
+
+    return template_data
+
 def create_approval_details_block(google_provider, approver_email, approval_time_str):
     approver_name = get_nama_lengkap_by_email(google_provider, approver_email)
     
@@ -211,7 +252,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
     else:
         tanggal_pengajuan_str = str(timestamp_from_data).split(" ")[0] if timestamp_from_data else ''
     
-    template_data = form_data.copy()
+    template_data = normalize_pdf_template_fields(form_data.copy())
     # --- UPDATE LOGIC FORMATTING ---
     nomor_ulok_raw = template_data.get(config.COLUMN_NAMES.LOKASI, '')
     if isinstance(nomor_ulok_raw, str):
@@ -376,7 +417,7 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
     else:
         tanggal_pengajuan_str = str(timestamp_from_data).split(" ")[0] if timestamp_from_data else ''
     
-    template_data = form_data.copy()
+    template_data = normalize_pdf_template_fields(form_data.copy())
     # --- UPDATE LOGIC FORMATTING ---
     nomor_ulok_raw = template_data.get(config.COLUMN_NAMES.LOKASI, '')
     if isinstance(nomor_ulok_raw, str):
@@ -553,7 +594,7 @@ def create_recap_pdf(google_provider, form_data):
     if dt_object:
         tanggal_pengajuan_str = dt_object.strftime('%d %B %Y')
 
-    template_data = form_data.copy()
+    template_data = normalize_pdf_template_fields(form_data.copy())
     
     # Format Nomor Ulok (jika perlu)
     nomor_ulok_raw = template_data.get(config.COLUMN_NAMES.LOKASI, '')
@@ -714,7 +755,7 @@ def create_recap_pdf_il(google_provider, form_data):
     if dt_object:
         tanggal_pengajuan_str = dt_object.strftime('%d %B %Y')
 
-    template_data = form_data.copy()
+    template_data = normalize_pdf_template_fields(form_data.copy())
     
     # Format Nomor Ulok (jika perlu)
     nomor_ulok_raw = template_data.get(config.COLUMN_NAMES.LOKASI, '')
