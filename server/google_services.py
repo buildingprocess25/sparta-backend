@@ -1201,6 +1201,199 @@ class GoogleServiceProvider:
             print(f"Error update keterlambatan day gantt: {e}")
             return {"success": False, "message": str(e)}
 
+    def update_kecepatan_day_gantt(self, nomor_ulok, lingkup_pekerjaan, kategori, h_awal, h_akhir, kecepatan):
+        """
+        Insert atau Update kolom kecepatan di sheet DAY_GANTT_CHART_SHEET_NAME.
+        Cari baris berdasarkan Nomor Ulok, Lingkup_Pekerjaan, Kategori, h_awal, dan h_akhir.
+        Jika ditemukan, update kolom kecepatan. Jika tidak, insert baris baru.
+
+        Parameters:
+        -----------
+        nomor_ulok : str
+            Nomor Ulok untuk mencari baris
+        lingkup_pekerjaan : str
+            Lingkup Pekerjaan untuk mencari baris
+        kategori : str
+            Kategori pekerjaan untuk mencari baris
+        h_awal : str
+            Hari awal untuk mencari baris
+        h_akhir : str
+            Hari akhir untuk mencari baris
+        kecepatan : str/int
+            Nilai kecepatan yang akan diinsert/update
+
+        Returns:
+        --------
+        dict: Hasil operasi dengan status dan detail
+        """
+        try:
+            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+
+            # Normalisasi input
+            target_ulok = str(nomor_ulok).strip().upper()
+            target_lingkup = str(lingkup_pekerjaan).strip().lower()
+            target_kategori = str(kategori).strip().lower()
+            target_h_awal = str(h_awal).strip()
+            target_h_akhir = str(h_akhir).strip()
+            kecepatan_value = str(kecepatan).strip()
+
+            # Validasi input
+            if not target_ulok:
+                return {"success": False, "message": "Nomor Ulok tidak boleh kosong"}
+            if not target_lingkup:
+                return {"success": False, "message": "Lingkup Pekerjaan tidak boleh kosong"}
+            if not target_kategori:
+                return {"success": False, "message": "Kategori tidak boleh kosong"}
+
+            if not all_values:
+                # Sheet kosong, buat header default dengan kolom kecepatan
+                default_headers = [
+                    config.COLUMN_NAMES.LOKASI,
+                    config.COLUMN_NAMES.LINGKUP_PEKERJAAN,
+                    "Kategori",
+                    config.COLUMN_NAMES.HARI_AWAL,
+                    config.COLUMN_NAMES.HARI_AKHIR,
+                    "kecepatan"
+                ]
+                worksheet.append_row(default_headers, value_input_option='USER_ENTERED')
+                headers = default_headers
+                data_rows = []
+            else:
+                headers = all_values[0]
+                data_rows = all_values[1:]
+
+            if not headers:
+                return {"success": False, "message": "Header sheet tidak ditemukan"}
+
+            # Pastikan kolom kecepatan ada di header
+            if "kecepatan" not in headers:
+                # Tambahkan kolom kecepatan ke header
+                new_col_idx = len(headers) + 1
+                worksheet.update_cell(1, new_col_idx, "kecepatan")
+                headers.append("kecepatan")
+
+            # Cari index kolom yang diperlukan
+            try:
+                ulok_idx = headers.index(config.COLUMN_NAMES.LOKASI)
+            except ValueError:
+                ulok_idx = headers.index("Nomor Ulok") if "Nomor Ulok" in headers else None
+                if ulok_idx is None:
+                    return {"success": False, "message": "Kolom Nomor Ulok tidak ditemukan di header"}
+
+            try:
+                lingkup_idx = headers.index(config.COLUMN_NAMES.LINGKUP_PEKERJAAN)
+            except ValueError:
+                lingkup_idx = headers.index("Lingkup_Pekerjaan") if "Lingkup_Pekerjaan" in headers else None
+                if lingkup_idx is None:
+                    return {"success": False, "message": "Kolom Lingkup_Pekerjaan tidak ditemukan di header"}
+
+            try:
+                kategori_idx = headers.index("Kategori")
+            except ValueError:
+                return {"success": False, "message": "Kolom Kategori tidak ditemukan di header"}
+
+            try:
+                h_awal_idx = headers.index(config.COLUMN_NAMES.HARI_AWAL)
+            except ValueError:
+                h_awal_idx = headers.index("h_awal") if "h_awal" in headers else None
+                if h_awal_idx is None:
+                    return {"success": False, "message": "Kolom h_awal tidak ditemukan di header"}
+
+            try:
+                h_akhir_idx = headers.index(config.COLUMN_NAMES.HARI_AKHIR)
+            except ValueError:
+                h_akhir_idx = headers.index("h_akhir") if "h_akhir" in headers else None
+                if h_akhir_idx is None:
+                    return {"success": False, "message": "Kolom h_akhir tidak ditemukan di header"}
+
+            kecepatan_idx = headers.index("kecepatan")
+
+            # Cari baris yang cocok dengan semua kriteria
+            found_row_index = None
+            for idx, row in enumerate(data_rows):
+                if len(row) <= max(ulok_idx, lingkup_idx, kategori_idx, h_awal_idx, h_akhir_idx):
+                    continue
+
+                current_ulok = str(row[ulok_idx]).strip().upper()
+                current_lingkup = str(row[lingkup_idx]).strip().lower()
+                current_kategori = str(row[kategori_idx]).strip().lower()
+                current_h_awal = str(row[h_awal_idx]).strip()
+                current_h_akhir = str(row[h_akhir_idx]).strip()
+
+                # Match semua kriteria
+                if (current_ulok == target_ulok and
+                    current_lingkup == target_lingkup and
+                    current_kategori == target_kategori and
+                    current_h_awal == target_h_awal and
+                    current_h_akhir == target_h_akhir):
+                    found_row_index = idx + 2  # +2 karena header di row 1 dan index mulai dari 0
+                    break
+
+            if found_row_index:
+                # UPDATE: Data ditemukan, update kolom kecepatan
+                cell_range = gspread.utils.rowcol_to_a1(found_row_index, kecepatan_idx + 1)
+                worksheet.update(cell_range, [[kecepatan_value]], value_input_option='USER_ENTERED')
+
+                return {
+                    "success": True,
+                    "message": "Kecepatan berhasil diperbarui",
+                    "row_index": found_row_index,
+                    "action": "update",
+                    "value": kecepatan_value
+                }
+            else:
+                # INSERT: Data tidak ditemukan, tambahkan baris baru
+                row_data = []
+                for header in headers:
+                    if header == config.COLUMN_NAMES.LOKASI or header == "Nomor Ulok":
+                        row_data.append(nomor_ulok)
+                    elif header == config.COLUMN_NAMES.LINGKUP_PEKERJAAN or header == "Lingkup_Pekerjaan":
+                        row_data.append(lingkup_pekerjaan)
+                    elif header == "Kategori":
+                        row_data.append(kategori)
+                    elif header == config.COLUMN_NAMES.HARI_AWAL or header == "h_awal":
+                        row_data.append(h_awal)
+                    elif header == config.COLUMN_NAMES.HARI_AKHIR or header == "h_akhir":
+                        row_data.append(h_akhir)
+                    elif header == "kecepatan":
+                        row_data.append(kecepatan_value)
+                    else:
+                        row_data.append("")
+
+                result = worksheet.append_row(
+                    row_data,
+                    value_input_option='USER_ENTERED',
+                    insert_data_option='INSERT_ROWS'
+                )
+
+                # Parse response untuk mendapatkan row number
+                new_row_index = None
+                try:
+                    updated_range = result.get('updates', {}).get('updatedRange', '')
+                    if updated_range:
+                        range_part = updated_range.split('!')[-1]
+                        match = re.search(r'[A-Z]+(\d+)', range_part)
+                        if match:
+                            new_row_index = int(match.group(1))
+                except Exception as e:
+                    print(f"Warning: Could not parse row index from append response: {e}")
+
+                if not new_row_index:
+                    new_row_index = len(worksheet.get_all_values())
+
+                return {
+                    "success": True,
+                    "message": "Data baru dengan kecepatan berhasil ditambahkan",
+                    "row_index": new_row_index,
+                    "action": "insert",
+                    "value": kecepatan_value
+                }
+
+        except Exception as e:
+            print(f"Error update kecepatan day gantt: {e}")
+            return {"success": False, "message": str(e)}
+
     def insert_day_gantt_chart_data(self, data_list):
         """
         FIXED: Support Multi-Range per Kategori.
