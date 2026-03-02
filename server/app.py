@@ -1175,19 +1175,43 @@ def handle_rab_approval():
                 raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row}")
 
             log_app("handle_rab_approval", "approved by coordinator", row=row, approver=approver)
+
+            row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_MANAGER
+            row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
+            row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = current_time
+
+            # Regenerate PDF agar tanda tangan koordinator langsung tercermin di link sheet
+            pdf_nonsbo_bytes = create_pdf_from_data(google_provider, row_data, exclude_sbo=True)
+            pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
+            pdf_merged_bytes = merge_pdf_bytes([pdf_nonsbo_bytes, pdf_recap_bytes])
+            pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+            pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+            pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+
+            link_pdf_nonsbo = google_provider.upload_file_to_drive(
+                pdf_nonsbo_bytes, pdf_nonsbo_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
+            )
+            link_pdf_rekap = google_provider.upload_file_to_drive(
+                pdf_recap_bytes, pdf_recap_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
+            )
+            link_pdf_merged = google_provider.upload_file_to_drive(
+                pdf_merged_bytes, pdf_merged_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
+            )
+
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_NONSBO, link_pdf_nonsbo):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_NONSBO} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_REKAP, link_pdf_rekap):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_REKAP} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF, link_pdf_merged):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF} pada row {row}")
+
+            row_data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
+            row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
+            row_data[config.COLUMN_NAMES.LINK_PDF] = link_pdf_merged
+
             manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
             if manager_emails:
-                row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_MANAGER
-                row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
-                row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = current_time
                 base_url = "https://sparta-backend-5hdj.onrender.com"
-
-                pdf_nonsbo_bytes = create_pdf_from_data(google_provider, row_data, exclude_sbo=True)
-                pdf_recap_bytes = create_recap_pdf(google_provider, row_data)
-                pdf_merged_bytes = merge_pdf_bytes([pdf_nonsbo_bytes, pdf_recap_bytes])
-                pdf_nonsbo_filename = f"RAB_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
-                pdf_recap_filename = f"REKAP_RAB_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
-                pdf_merged_filename = f"RAB_GABUNGAN_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
 
                 for manager_email in manager_emails:
                     approval_url_manager = f"{base_url}/api/handle_rab_approval?action=approve&row={row}&level=manager&approver={manager_email}"
@@ -1380,6 +1404,29 @@ def handle_rab_2_approval():
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = current_time
 
+                # Regenerate PDF agar tanda tangan koordinator langsung tercermin di link sheet RAB 2
+                jenis_toko = row_data.get('Proyek', 'N/A')
+                pdf_nonsbo_bytes = create_pdf_from_data_il(google_provider, row_data, exclude_sbo=True)
+                pdf_recap_bytes = create_recap_pdf_il(google_provider, row_data)
+
+                pdf_nonsbo_filename = f"IL_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+                pdf_recap_filename = f"REKAP_IL_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
+
+                link_pdf_nonsbo = google_provider.upload_file_to_drive(
+                    pdf_nonsbo_bytes, pdf_nonsbo_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
+                )
+                link_pdf_rekap = google_provider.upload_file_to_drive(
+                    pdf_recap_bytes, pdf_recap_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
+                )
+
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.LINK_PDF_NONSBO, link_pdf_nonsbo):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_NONSBO} pada row {row} (RAB 2)")
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.LINK_PDF_REKAP, link_pdf_rekap):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_REKAP} pada row {row} (RAB 2)")
+
+                row_data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
+                row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
+
                 # 3. Cari Email Manager
                 cabang = row_data.get('Cabang')
                 manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
@@ -1388,15 +1435,8 @@ def handle_rab_2_approval():
                     base_url = "https://sparta-backend-5hdj.onrender.com" 
 
                     # 5. Generate PDF Otomatis
-                    jenis_toko = row_data.get('Proyek', 'N/A')
                     nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
                     lingkup_pekerjaan = row_data.get('Lingkup_Pekerjaan', row_data.get('lingkup_pekerjaan', 'N/A'))
-
-                    pdf_nonsbo_bytes = create_pdf_from_data_il(google_provider, row_data, exclude_sbo=True)
-                    pdf_recap_bytes = create_recap_pdf_il(google_provider, row_data)
-                    
-                    pdf_nonsbo_filename = f"IL_NON-SBO_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
-                    pdf_recap_filename = f"REKAP_IL_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
                     
                     final_attachments = [
                         (pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'),
