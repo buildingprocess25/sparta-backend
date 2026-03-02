@@ -228,6 +228,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
 
     logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Alfamart-Emblem.png'))
     watermark_logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Building-Logo.png'))
+    watermark_logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Building-Logo.png'))
 
     # Kita ambil langsung dari form_data karena app.py sudah memasukkannya
     nama_pt_found = form_data.get(config.COLUMN_NAMES.NAMA_PT)
@@ -571,6 +572,7 @@ def create_recap_pdf(google_provider, form_data):
             )
 
     logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Alfamart-Emblem.png'))
+    watermark_logo_path = 'file:///' + os.path.abspath(os.path.join('static', 'Building-Logo.png'))
 
     # Kita ambil langsung dari form_data karena app.py sudah memasukkannya
     nama_pt_found = form_data.get(config.COLUMN_NAMES.NAMA_PT)
