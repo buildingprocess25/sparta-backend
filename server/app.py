@@ -1167,12 +1167,18 @@ def handle_rab_approval():
             return render_template('response_page.html', title='Permintaan Ditolak', message='Status permintaan telah diperbarui.', logo_url=logo_url)
 
         elif level == 'coordinator' and action == 'approve':
-            google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_MANAGER)
-            google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver)
-            google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME, current_time)
+            # Fail-fast: pastikan data tanda tangan koordinator tersimpan sebelum status diteruskan ke manager
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.KOORDINATOR_APPROVER} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME, current_time):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_MANAGER):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row}")
+
             log_app("handle_rab_approval", "approved by coordinator", row=row, approver=approver)
             manager_email = google_provider.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
             if manager_email:
+                row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_MANAGER
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = current_time
                 base_url = "https://sparta-backend-5hdj.onrender.com"
@@ -1194,11 +1200,6 @@ def handle_rab_approval():
             return render_template('response_page.html', title='Persetujuan Diteruskan', message='Terima kasih. Persetujuan Anda telah dicatat.', logo_url=logo_url)
         
         elif level == 'manager' and action == 'approve':
-            google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED)
-            google_provider.update_cell(row, config.COLUMN_NAMES.MANAGER_APPROVER, approver)
-            google_provider.update_cell(row, config.COLUMN_NAMES.MANAGER_APPROVAL_TIME, current_time)
-            log_app("handle_rab_approval", "approved by manager", row=row, approver=approver)
-            
             row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.APPROVED
             row_data[config.COLUMN_NAMES.MANAGER_APPROVER] = approver
             row_data[config.COLUMN_NAMES.MANAGER_APPROVAL_TIME] = current_time
@@ -1224,10 +1225,21 @@ def handle_rab_approval():
                 pdf_merged_bytes, pdf_merged_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
             )
 
-            # Update sheet
-            google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_NONSBO, link_pdf_nonsbo)
-            google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_REKAP, link_pdf_rekap)
-            google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF, link_pdf_merged)
+            # Update sheet (fail-fast supaya tidak ada status approved dengan data tanda tangan kosong)
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.MANAGER_APPROVER, approver):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.MANAGER_APPROVER} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.MANAGER_APPROVAL_TIME, current_time):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.MANAGER_APPROVAL_TIME} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_NONSBO, link_pdf_nonsbo):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_NONSBO} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF_REKAP, link_pdf_rekap):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_REKAP} pada row {row}")
+            if not google_provider.update_cell(row, config.COLUMN_NAMES.LINK_PDF, link_pdf_merged):
+                raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF} pada row {row}")
+
+            log_app("handle_rab_approval", "approved by manager", row=row, approver=approver)
 
             row_data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
             row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
@@ -1351,13 +1363,18 @@ def handle_rab_2_approval():
             # LOGIKA KOORDINATOR (Sama seperti sebelumnya)
             # =================================================================
             if level == 'coordinator':
-                # 1. Update Status Spreadsheet
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_MANAGER)
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver)
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME, current_time)
+                # 1. Update Spreadsheet (fail-fast): simpan tanda tangan koordinator dulu, baru status
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.KOORDINATOR_APPROVER, approver):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.KOORDINATOR_APPROVER} pada row {row} (RAB 2)")
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME, current_time):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME} pada row {row} (RAB 2)")
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, config.STATUS.WAITING_FOR_MANAGER):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row} (RAB 2)")
+
                 log_app("handle_rab_2_approval", "approved by coordinator", row=row, approver=approver)
                 
                 # 2. Update data lokal
+                row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_MANAGER
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVER] = approver
                 row_data[config.COLUMN_NAMES.KOORDINATOR_APPROVAL_TIME] = current_time
 
@@ -1418,18 +1435,12 @@ def handle_rab_2_approval():
             # LOGIKA MANAGER
             # =================================================================
             elif level == 'manager':
-                # 1. Update Status & Kolom Manager di Spreadsheet
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED)
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.MANAGER_APPROVER, approver)
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.MANAGER_APPROVAL_TIME, current_time)
-                log_app("handle_rab_2_approval", "approved by manager", row=row, approver=approver)
-                
-                # 2. Update data lokal variable row_data
+                # 1. Update data lokal variable row_data
                 row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.APPROVED
                 row_data[config.COLUMN_NAMES.MANAGER_APPROVER] = approver
                 row_data[config.COLUMN_NAMES.MANAGER_APPROVAL_TIME] = current_time
 
-                # 3. Generate PDF FINAL (Yang sudah ada nama Manager)
+                # 2. Generate PDF FINAL (Yang sudah ada nama Manager)
                 jenis_toko = row_data.get('Proyek', 'N/A')
                 nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
                 cabang = row_data.get('Cabang')
@@ -1442,7 +1453,7 @@ def handle_rab_2_approval():
                 pdf_recap_bytes = create_recap_pdf_il(google_provider, row_data)
                 pdf_recap_filename = f"DISETUJUI_REKAP_IL_{jenis_toko}_{row_data.get('Nomor Ulok')}.pdf"
 
-                # 4. Upload PDF Final ke Google Drive
+                # 3. Upload PDF Final ke Google Drive
                 link_pdf_nonsbo = google_provider.upload_file_to_drive(
                     pdf_nonsbo_bytes, pdf_nonsbo_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
                 )
@@ -1450,23 +1461,33 @@ def handle_rab_2_approval():
                     pdf_recap_bytes, pdf_recap_filename, 'application/pdf', config.PDF_STORAGE_FOLDER_ID
                 )
 
-                # 5. Update Link PDF Baru ke Spreadsheet RAB 2
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.LINK_PDF_NONSBO, link_pdf_nonsbo)
-                google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.LINK_PDF_REKAP, link_pdf_rekap)
+                # 4. Update Spreadsheet RAB 2 (fail-fast)
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.MANAGER_APPROVER, approver):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.MANAGER_APPROVER} pada row {row} (RAB 2)")
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.MANAGER_APPROVAL_TIME, current_time):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.MANAGER_APPROVAL_TIME} pada row {row} (RAB 2)")
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row} (RAB 2)")
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.LINK_PDF_NONSBO, link_pdf_nonsbo):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_NONSBO} pada row {row} (RAB 2)")
+                if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.LINK_PDF_REKAP, link_pdf_rekap):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.LINK_PDF_REKAP} pada row {row} (RAB 2)")
+
+                log_app("handle_rab_2_approval", "approved by manager", row=row, approver=approver)
 
                 row_data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
                 row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
 
-                # 6. Copy ke Sheet Approved RAB 2 (Form3)
+                # 5. Copy ke Sheet Approved RAB 2 (Form3)
                 google_provider.copy_to_approved_sheet_kedua(row_data)
 
-                # 7. Kumpulkan Email Penerima
+                # 6. Kumpulkan Email Penerima
                 email_pembuat = row_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
                 support_emails = [email_pembuat] if email_pembuat else []
                 coordinator_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.KOORDINATOR)
                 manager_email = approver
 
-                # 8. Siapkan Attachment Email (PDF Final RAB & Rekap)
+                # 7. Siapkan Attachment Email (PDF Final RAB & Rekap)
                 email_attachments = [
                     (pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'),
                     (pdf_recap_filename, pdf_recap_bytes, 'application/pdf')
