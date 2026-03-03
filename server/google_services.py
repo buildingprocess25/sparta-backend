@@ -2672,33 +2672,37 @@ class GoogleServiceProvider:
         else:
             print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
     
-    # Ke summary Sheet RAB
-    def send_status_rab(self, status, nomor_ulok, lingkup_pekerjaan):
+    # Ke summary Sheet RAB (mode INSERT)
+    def send_status_rab(self, status, nomor_ulok, lingkup_pekerjaan, cabang=""):
         spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
-            
-            # 2. Buka Worksheet Summary
-        summary_sheet = spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
 
-        # Cari baris yang sesuai berdasarkan Nomor Ulok dan Lingkup Pekerjaan
-        all_records = summary_sheet.get_all_records()
+        # 2. Buka Worksheet Summary
+        summary_sheet = spreadsheet.worksheet(config.SUMMARY_DATA_SHEET_NAME)
         headers = summary_sheet.row_values(1)
-        
-        row_found = None
-        for idx, record in enumerate(all_records):
-            record_ulok = str(record.get('Nomor Ulok', '')).strip()
-            record_lingkup = str(record.get('Lingkup_Pekerjaan', '')).strip()
-            
-            if record_ulok.upper() == nomor_ulok.strip().upper() and record_lingkup.upper() == lingkup_pekerjaan.strip().upper():
-                row_found = idx + 2  # +2 karena index 0-based dan ada header
-                break
-        
-        if row_found:
-            # Update kolom Status pada baris yang ditemukan
-            col_idx = headers.index('Status_Rab') + 1  # +1 karena gspread 1-based
-            summary_sheet.update_cell(row_found, col_idx, status)
-            print(f"Berhasil update status RAB ke sheet Summary untuk Ulok: {nomor_ulok}")
-        else:
-            print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
+
+        summary_data = {
+            'Cabang': cabang,
+            'Nomor Ulok': nomor_ulok,
+            'Lingkup_Pekerjaan': lingkup_pekerjaan,
+            'Status_Rab': status,
+        }
+
+        # Fallback jika variasi nama kolom berbeda di sheet
+        if 'Lingkup Pekerjaan' in headers and 'Lingkup_Pekerjaan' not in headers:
+            summary_data['Lingkup Pekerjaan'] = lingkup_pekerjaan
+        if 'Status RAB' in headers and 'Status_Rab' not in headers:
+            summary_data['Status RAB'] = status
+        if 'Status_RAB' in headers and 'Status_Rab' not in headers:
+            summary_data['Status_RAB'] = status
+
+        data_to_append = [summary_data.get(header, "") for header in headers]
+
+        summary_sheet.append_row(
+            data_to_append,
+            value_input_option='USER_ENTERED',
+            insert_data_option='INSERT_ROWS'
+        )
+        print(f"Berhasil insert status RAB ke sheet Summary untuk Ulok: {nomor_ulok}")
 
     def delete_row(self, worksheet_name, row_index):
         try:
