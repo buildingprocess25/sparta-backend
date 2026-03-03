@@ -6,7 +6,6 @@ import base64
 import re
 import mimetypes
 import traceback
-import threading
 import time
 import config
 from google_services import GoogleServiceProvider
@@ -15,9 +14,6 @@ from googleapiclient.errors import HttpError
 
 # Inisialisasi Blueprint
 doc_bp = Blueprint('document_api', __name__)
-
-_provider_instance = None
-_provider_lock = threading.Lock()
 
 # Kita akan menggunakan instance google_provider yang nanti di-pass atau di-import
 # Untuk simplifikasi, kita asumsikan google_provider dibuat di app.py dan kita import helpernya
@@ -90,17 +86,10 @@ def with_google_retry(operation, op_name="google_call", max_retries=4, base_dela
 
 
 def get_google_provider():
-    global _provider_instance
-    if _provider_instance is not None:
-        return _provider_instance
-
-    with _provider_lock:
-        if _provider_instance is None:
-            _provider_instance = with_google_retry(
-                lambda: GoogleServiceProvider(),
-                op_name="provider_init",
-            )
-    return _provider_instance
+    return with_google_retry(
+        lambda: GoogleServiceProvider(),
+        op_name="provider_init",
+    )
 
 
 # --- ROUTES ---
