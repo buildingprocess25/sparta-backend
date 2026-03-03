@@ -666,7 +666,8 @@ def submit_rab():
             config.STATUS.WAITING_FOR_COORDINATOR,
             nomor_ulok_formatted,
             data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, ''),
-            cabang_value
+            cabang_value,
+            data.get(config.COLUMN_NAMES.TIMESTAMP, '')
         )
 
         # --- 6) SIMPAN KE SHEET ---

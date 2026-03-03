@@ -2585,6 +2585,7 @@ class GoogleServiceProvider:
                     'Total Penawaran Final': row_data.get('Grand Total Final', row_data.get(config.COLUMN_NAMES.GRAND_TOTAL_FINAL, '')),
                     'Kategori': row_data.get('Kategori_Lokasi', row_data.get(config.COLUMN_NAMES.KATEGORI_LOKASI, '')),
                     'Status_Rab': row_data.get('Status', row_data.get(config.COLUMN_NAMES.STATUS, '')),
+                    'Timestamp': row_data.get('Timestamp', row_data.get(config.COLUMN_NAMES.TIMESTAMP, '')),
                 }
 
                 # 4. Ambil header dari sheet
@@ -2695,7 +2696,7 @@ class GoogleServiceProvider:
             print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
     
     # Ke summary Sheet RAB (mode INSERT)
-    def send_status_rab(self, status, nomor_ulok, lingkup_pekerjaan, cabang=""):
+    def send_status_rab(self, status, nomor_ulok, lingkup_pekerjaan, cabang="", timestamp=""):
         spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
 
         # 2. Buka Worksheet Summary
@@ -2707,6 +2708,7 @@ class GoogleServiceProvider:
             'Nomor Ulok': nomor_ulok,
             'Lingkup_Pekerjaan': lingkup_pekerjaan,
             'Status_Rab': status,
+            'Timestamp': timestamp,
         }
 
         # Fallback jika variasi nama kolom berbeda di sheet
