@@ -84,6 +84,10 @@ class GoogleServiceProvider:
             lambda: self.gspread_client.open_by_key(config.SPREADSHEET_ID),
             op_name="sparta_open_sheet",
         )
+        self.gantt_sheet = self._with_google_retry(
+            lambda: self.gspread_client.open_by_key(config.GANTT_SPREADSHEET_ID),
+            op_name="sparta_open_gantt_sheet",
+        )
         self.data_entry_sheet = self._with_google_retry(
             lambda: self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME),
             op_name="sparta_open_data_entry_worksheet",
@@ -193,6 +197,9 @@ class GoogleServiceProvider:
             return creds
         else:
             raise Exception(f"Token file {token_filename} not found.")
+
+    def _get_gantt_worksheet(self, sheet_name):
+        return self.gantt_sheet.worksheet(sheet_name)
 
     def _escape_name_for_query(self, name: str) -> str:
         return name.replace("'", "\\'")
@@ -477,7 +484,7 @@ class GoogleServiceProvider:
             # --- AMBIL DATA GANTT CHART (Jika ada) ---
             gantt_data = None
             try:
-                gantt_sheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+                gantt_sheet = self._get_gantt_worksheet(config.GANTT_CHART_SHEET_NAME)
                 all_gantt_values = gantt_sheet.get_all_values()
                 
                 if all_gantt_values:
@@ -516,7 +523,7 @@ class GoogleServiceProvider:
             # --- AMBIL DATA DAY GANTT CHART (Jika ada) ---
             day_gantt_data = []
             try:
-                day_gantt_sheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+                day_gantt_sheet = self._get_gantt_worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
                 all_day_gantt_values = day_gantt_sheet.get_all_values()
                 
                 if all_day_gantt_values:
@@ -554,7 +561,7 @@ class GoogleServiceProvider:
             # --- AMBIL DATA DEPENDENCY GANTT (Jika ada) ---
             dependency_data = []
             try:
-                dependency_sheet = self.sheet.worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
+                dependency_sheet = self._get_gantt_worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
                 all_dependency_values = dependency_sheet.get_all_values()
                 
                 if all_dependency_values:
@@ -663,7 +670,7 @@ class GoogleServiceProvider:
         Jika ada, update field yang dikirim. Jika belum ada, insert baris baru.
         """
         try:
-            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -791,7 +798,7 @@ class GoogleServiceProvider:
         dict: Hasil operasi dengan status dan detail
         """
         try:
-            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -922,7 +929,7 @@ class GoogleServiceProvider:
         dict: Hasil operasi dengan status dan detail
         """
         try:
-            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -1072,7 +1079,7 @@ class GoogleServiceProvider:
         dict: Hasil operasi dengan status dan detail
         """
         try:
-            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             # Normalisasi input
@@ -1265,7 +1272,7 @@ class GoogleServiceProvider:
         dict: Hasil operasi dengan status dan detail
         """
         try:
-            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
 
             # Normalisasi input
@@ -1439,7 +1446,7 @@ class GoogleServiceProvider:
         Ini memungkinkan satu kategori memiliki banyak baris (range tanggal berbeda).
         """
         try:
-            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -1612,7 +1619,7 @@ class GoogleServiceProvider:
         dict: Hasil operasi dengan status dan detail
         """
         try:
-            worksheet = self.sheet.worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.DAY_GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -1783,7 +1790,7 @@ class GoogleServiceProvider:
         dict: Hasil operasi dengan status dan detail
         """
         try:
-            worksheet = self.sheet.worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values:
@@ -1931,7 +1938,7 @@ class GoogleServiceProvider:
         dict: Hasil operasi dengan status dan detail
         """
         try:
-            worksheet = self.sheet.worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.DEPENDENCY_GANTT_SHEET_NAME)
             all_values = worksheet.get_all_values()
             
             if not all_values or len(all_values) < 2:
@@ -2105,7 +2112,7 @@ class GoogleServiceProvider:
         Jika baris tidak ditemukan, fungsi akan mengembalikan False tanpa error.
         """
         try:
-            worksheet = self.sheet.worksheet(config.GANTT_CHART_SHEET_NAME)
+            worksheet = self._get_gantt_worksheet(config.GANTT_CHART_SHEET_NAME)
             all_values = worksheet.get_all_values()
             if not all_values or len(all_values) < 2:
                 return False

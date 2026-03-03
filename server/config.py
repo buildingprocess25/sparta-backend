@@ -26,6 +26,9 @@ INPUT_PIC_DRIVE_FOLDER_ID = "1gkGZhOJYVo7zv7sZnUIOYAafL-NbNHf8"
 # ID Spreadsheet untuk Opname
 OPNAME_SHEET_ID = "1ssXGBJ-D4O8JVB1emOBuqcdmBKvdymciVsv7eMaBb64"
 
+# ID Spreadsheet khusus Gantt Chart
+GANTT_SPREADSHEET_ID = os.getenv("GANTT_SPREADSHEET_ID", SPREADSHEET_ID)
+
 # ID Spreadsheet untuk Penyimpanan Dokumen
 DOC_DRIVE_ROOT_ID = os.getenv("DRIVE_ROOT_ID", "14hjuP33ez1v1WDxkTi7A3k-XfKOZKVTc") # ID Folder Root Drive Penyimpanan
 DOC_SHEET_NAME = os.getenv("SHEET_NAME", "penyimpanan_dokumen")
