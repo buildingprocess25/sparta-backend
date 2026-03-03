@@ -6,11 +6,18 @@ import base64
 import re
 import mimetypes
 import traceback
+import threading
+import time
 import config
 from google_services import GoogleServiceProvider
+from gspread.exceptions import APIError
+from googleapiclient.errors import HttpError
 
 # Inisialisasi Blueprint
 doc_bp = Blueprint('document_api', __name__)
+
+_provider_instance = None
+_provider_lock = threading.Lock()
 
 # Kita akan menggunakan instance google_provider yang nanti di-pass atau di-import
 # Untuk simplifikasi, kita asumsikan google_provider dibuat di app.py dan kita import helpernya
@@ -51,6 +58,51 @@ def log_doc(func: str, message: str, **kwargs):
     print(f"[DOC][{func}] {ts} - {message}{' | ' + extra if extra else ''}")
 
 
+def _extract_status_code(error: Exception):
+    try:
+        if isinstance(error, APIError) and getattr(error, "response", None) is not None:
+            return int(getattr(error.response, "status_code", 0) or 0)
+        if isinstance(error, HttpError) and getattr(error, "resp", None) is not None:
+            return int(getattr(error.resp, "status", 0) or 0)
+    except Exception:
+        return None
+    return None
+
+
+def with_google_retry(operation, op_name="google_call", max_retries=4, base_delay=1.0):
+    for attempt in range(max_retries + 1):
+        try:
+            return operation()
+        except Exception as err:
+            status_code = _extract_status_code(err)
+            if status_code != 429 or attempt >= max_retries:
+                raise
+
+            delay = base_delay * (2 ** attempt)
+            log_doc(
+                "google_retry",
+                "quota hit, retrying",
+                operation=op_name,
+                attempt=attempt + 1,
+                sleep_seconds=delay,
+            )
+            time.sleep(delay)
+
+
+def get_google_provider():
+    global _provider_instance
+    if _provider_instance is not None:
+        return _provider_instance
+
+    with _provider_lock:
+        if _provider_instance is None:
+            _provider_instance = with_google_retry(
+                lambda: GoogleServiceProvider(),
+                op_name="provider_init",
+            )
+    return _provider_instance
+
+
 # --- ROUTES ---
 
 @doc_bp.route('/api/doc/login', methods=['POST'])
@@ -67,10 +119,10 @@ def login_doc():
         return jsonify({"detail": "Username dan password wajib diisi"}), 400
 
     try:
-        provider = GoogleServiceProvider()
+        provider = get_google_provider()
         # Akses sheet Cabang via provider
-        ws = provider.sheet.worksheet("Cabang")
-        records = ws.get_all_records()
+        ws = with_google_retry(lambda: provider.sheet.worksheet("Cabang"), "login_open_cabang_sheet")
+        records = with_google_retry(lambda: ws.get_all_records(), "login_get_all_records")
 
         allowed_roles = [
             "BRANCH BUILDING SUPPORT",
@@ -114,11 +166,9 @@ def login_doc():
 def list_documents():
     cabang = request.args.get('cabang')
     try:
-        provider = GoogleServiceProvider()
-        # Buka spreadsheet penyimpanan
-        doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
-        ws = provider.doc_sheet.worksheet(config.DOC_SHEET_NAME)
-        data = ws.get_all_records()
+        provider = get_google_provider()
+        ws = with_google_retry(lambda: provider.doc_sheet.worksheet(config.DOC_SHEET_NAME), "list_open_doc_sheet")
+        data = with_google_retry(lambda: ws.get_all_records(), "list_get_all_records")
 
         log_doc("list_documents", "fetched records", total=len(data), cabang_filter=cabang or "-")
 
@@ -147,7 +197,7 @@ def list_documents():
 @doc_bp.route('/api/doc/save', methods=['POST'])
 def save_document_base64():
     try:
-        provider = GoogleServiceProvider()
+        provider = get_google_provider()
         payload = request.get_json()
         
         kode_toko = payload.get("kode_toko")
@@ -180,11 +230,10 @@ def save_document_base64():
             return jsonify({"detail": "Data toko belum lengkap."}), 400
 
         # 1. Buka Sheet
-        doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
-        ws = provider.doc_sheet.worksheet(config.DOC_SHEET_NAME)
+        ws = with_google_retry(lambda: provider.doc_sheet.worksheet(config.DOC_SHEET_NAME), "save_open_doc_sheet")
 
         # 2. Validasi Duplikat
-        existing_records = ws.get_all_records()
+        existing_records = with_google_retry(lambda: ws.get_all_records(), "save_get_all_records")
         log_doc("save_document_base64", "existing records fetched", count=len(existing_records))
         for row in existing_records:
             existing_code = str(row.get("kode_toko") or row.get("KodeToko") or "").strip().upper()
@@ -238,13 +287,16 @@ def save_document_base64():
         # 4. Simpan ke Sheet
         jakarta_tz = pytz.timezone('Asia/Jakarta')
         now = datetime.now(jakarta_tz).strftime("%Y-%m-%d %H:%M:%S")
-        ws.append_row([
-            kode_toko, nama_toko, cabang, luas_sales, luas_parkir, luas_gudang, luas_bangunan_lantai_1, luas_bangunan_lantai_2, luas_bangunan_lantai_3, total_luas_bangunan, luas_area_terbuka, tinggi_plafon,
-            f"https://drive.google.com/drive/folders/{toko_folder}",
-            ", ".join(file_links),
-            now,
-            email  # last_edit
-        ])
+        with_google_retry(
+            lambda: ws.append_row([
+                kode_toko, nama_toko, cabang, luas_sales, luas_parkir, luas_gudang, luas_bangunan_lantai_1, luas_bangunan_lantai_2, luas_bangunan_lantai_3, total_luas_bangunan, luas_area_terbuka, tinggi_plafon,
+                f"https://drive.google.com/drive/folders/{toko_folder}",
+                ", ".join(file_links),
+                now,
+                email
+            ]),
+            "save_append_row",
+        )
 
         log_doc(
             "save_document_base64",
@@ -270,7 +322,7 @@ def save_document_base64():
 @doc_bp.route('/api/doc/update/<kode_toko>', methods=['PUT'])
 def update_document(kode_toko):
     try:
-        provider = GoogleServiceProvider()
+        provider = get_google_provider()
         data = request.get_json()
         files = data.get("files", [])
         email = data.get("email", "")
@@ -288,9 +340,8 @@ def update_document(kode_toko):
         update_timestamp = datetime.now(jakarta_tz).strftime("%Y-%m-%d %H:%M:%S")
 
         # Buka Sheet
-        doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
-        ws = provider.doc_sheet.worksheet(config.DOC_SHEET_NAME)
-        records = ws.get_all_records()
+        ws = with_google_retry(lambda: provider.doc_sheet.worksheet(config.DOC_SHEET_NAME), "update_open_doc_sheet")
+        records = with_google_retry(lambda: ws.get_all_records(), "update_get_all_records")
 
         log_doc("update_document", "records fetched", total=len(records))
 
@@ -463,24 +514,27 @@ def update_document(kode_toko):
         # Update Sheet
         # Hati-hati urutan kolom harus sama persis dengan sheet
         cell_range = f"A{row_index}:P{row_index}"
-        ws.update(cell_range, [[
-            old_data.get("kode_toko"),
-            old_data.get("nama_toko"),
-            old_data.get("cabang"),
-            data.get("luas_sales", old_data.get("luas_sales")), # Update luas jika ada
-            data.get("luas_parkir", old_data.get("luas_parkir")),
-            data.get("luas_gudang", old_data.get("luas_gudang")),
-            data.get("luas_bangunan_lantai_1", old_data.get("luas_bangunan_lantai_1")),
-            data.get("luas_bangunan_lantai_2", old_data.get("luas_bangunan_lantai_2")),
-            data.get("luas_bangunan_lantai_3", old_data.get("luas_bangunan_lantai_3")),
-            data.get("total_luas_bangunan", old_data.get("total_luas_bangunan")),
-            data.get("luas_area_terbuka", old_data.get("luas_area_terbuka")),
-            data.get("tinggi_plafon", old_data.get("tinggi_plafon")),
-            old_folder_link,
-            ", ".join(new_file_links),
-            update_timestamp,  # timestamp diupdate saat ada perubahan
-            email  # last_edit
-        ]])
+        with_google_retry(
+            lambda: ws.update(cell_range, [[
+                old_data.get("kode_toko"),
+                old_data.get("nama_toko"),
+                old_data.get("cabang"),
+                data.get("luas_sales", old_data.get("luas_sales")),
+                data.get("luas_parkir", old_data.get("luas_parkir")),
+                data.get("luas_gudang", old_data.get("luas_gudang")),
+                data.get("luas_bangunan_lantai_1", old_data.get("luas_bangunan_lantai_1")),
+                data.get("luas_bangunan_lantai_2", old_data.get("luas_bangunan_lantai_2")),
+                data.get("luas_bangunan_lantai_3", old_data.get("luas_bangunan_lantai_3")),
+                data.get("total_luas_bangunan", old_data.get("total_luas_bangunan")),
+                data.get("luas_area_terbuka", old_data.get("luas_area_terbuka")),
+                data.get("tinggi_plafon", old_data.get("tinggi_plafon")),
+                old_folder_link,
+                ", ".join(new_file_links),
+                update_timestamp,
+                email
+            ]]),
+            "update_sheet_row",
+        )
 
         log_doc(
             "update_document",
@@ -502,10 +556,9 @@ def update_document(kode_toko):
 @doc_bp.route('/api/doc/delete/<kode_toko>', methods=['DELETE'])
 def delete_document(kode_toko):
     try:
-        provider = GoogleServiceProvider()
-        doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
-        ws = doc_sheet.worksheet(config.DOC_SHEET_NAME)
-        records = ws.get_all_records()
+        provider = get_google_provider()
+        ws = with_google_retry(lambda: provider.doc_sheet.worksheet(config.DOC_SHEET_NAME), "delete_open_doc_sheet")
+        records = with_google_retry(lambda: ws.get_all_records(), "delete_get_all_records")
 
         log_doc("delete_document", "request received", kode_toko=kode_toko, total_records=len(records))
         
@@ -522,7 +575,7 @@ def delete_document(kode_toko):
             provider.delete_drive_file(folder_id)
             log_doc("delete_document", "drive folder deleted", folder_id=folder_id)
 
-        ws.delete_rows(row_index)
+        with_google_retry(lambda: ws.delete_rows(row_index), "delete_row")
         log_doc("delete_document", "row deleted", row=row_index)
         return jsonify({"ok": True, "message": "Dokumen dihapus"})
     except Exception as e:
@@ -532,10 +585,9 @@ def delete_document(kode_toko):
 @doc_bp.route('/api/doc/detail/<kode_toko>', methods=['GET'])
 def get_document_detail(kode_toko):
     try:
-        provider = GoogleServiceProvider()
-        doc_sheet = provider.gspread_client.open_by_key(config.SPREADSHEET_ID)
-        ws = doc_sheet.worksheet(config.DOC_SHEET_NAME)
-        records = ws.get_all_records()
+        provider = get_google_provider()
+        ws = with_google_retry(lambda: provider.doc_sheet.worksheet(config.DOC_SHEET_NAME), "detail_open_doc_sheet")
+        records = with_google_retry(lambda: ws.get_all_records(), "detail_get_all_records")
 
         log_doc("get_document_detail", "records fetched", total=len(records), kode_toko=kode_toko)
         

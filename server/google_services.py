@@ -4,6 +4,7 @@ import re
 import gspread
 import json
 import time
+from gspread.exceptions import APIError
 from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -20,6 +21,31 @@ from datetime import datetime, timezone, timedelta
 import config
 
 class GoogleServiceProvider:
+    def _extract_status_code(self, error: Exception):
+        try:
+            if isinstance(error, APIError) and getattr(error, "response", None) is not None:
+                return int(getattr(error.response, "status_code", 0) or 0)
+            if isinstance(error, HttpError) and getattr(error, "resp", None) is not None:
+                return int(getattr(error.resp, "status", 0) or 0)
+        except Exception:
+            return None
+        return None
+
+    def _with_google_retry(self, operation, op_name="google_call", max_retries=4, base_delay=1.0):
+        for attempt in range(max_retries + 1):
+            try:
+                return operation()
+            except Exception as err:
+                status_code = self._extract_status_code(err)
+                if status_code != 429 or attempt >= max_retries:
+                    raise
+
+                delay = base_delay * (2 ** attempt)
+                print(
+                    f"⚠️ Quota 429 saat {op_name}. Retry {attempt + 1}/{max_retries} dalam {delay:.1f}s"
+                )
+                time.sleep(delay)
+
     def __init__(self):
         # ==========================================
         # 1. SCOPES DEFINITION
@@ -54,8 +80,14 @@ class GoogleServiceProvider:
         
         # Service Sparta
         self.gspread_client = gspread.authorize(self.sparta_creds)
-        self.sheet = self.gspread_client.open_by_key(config.SPREADSHEET_ID)
-        self.data_entry_sheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
+        self.sheet = self._with_google_retry(
+            lambda: self.gspread_client.open_by_key(config.SPREADSHEET_ID),
+            op_name="sparta_open_sheet",
+        )
+        self.data_entry_sheet = self._with_google_retry(
+            lambda: self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME),
+            op_name="sparta_open_data_entry_worksheet",
+        )
         
         self.drive_service = build('drive', 'v3', credentials=self.sparta_creds)
         self.gmail_service = build('gmail', 'v1', credentials=self.sparta_creds)
@@ -76,7 +108,10 @@ class GoogleServiceProvider:
             
             if getattr(config, 'SPREADSHEET_ID', None):
                 # Note: Ini sepertinya pakai ID sheet Sparta juga? Sesuaikan jika beda.
-                self.doc_sheet = self.doc_gspread_client.open_by_key(config.SPREADSHEET_ID)
+                self.doc_sheet = self._with_google_retry(
+                    lambda: self.doc_gspread_client.open_by_key(config.SPREADSHEET_ID),
+                    op_name="doc_open_sheet",
+                )
             
             self.doc_drive_service = build('drive', 'v3', credentials=self.doc_creds)
             print("✅ Service Dokumen (Existing) Berhasil.")
@@ -124,7 +159,10 @@ class GoogleServiceProvider:
             # Buka Sheet Dokumentasi (ID dari config)
             doc_sheet_id = getattr(config, "DOC_SHEET_ID", None)
             if doc_sheet_id:
-                self.dokumentasi_sheet = self.dokumentasi_gspread.open_by_key(doc_sheet_id)
+                self.dokumentasi_sheet = self._with_google_retry(
+                    lambda: self.dokumentasi_gspread.open_by_key(doc_sheet_id),
+                    op_name="dokumentasi_open_sheet",
+                )
                 print("✅ Service Dokumentasi (OAuth) Berhasil.")
             else:
                 print("⚠️ Warning: DOC_SHEET_ID belum ada di config.")

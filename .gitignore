@@ -15,6 +15,7 @@ __pycache__/
 /server/service_account_doc.json
 client_secret.json
 token.json
+token_doc.json
 *.env
 .env*
 
