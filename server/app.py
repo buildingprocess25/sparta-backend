@@ -601,7 +601,7 @@ def submit_rab():
         data['Item_Details_JSON'] = json.dumps(item_details)
 
         jenis_toko = data.get('Proyek', 'N/A')
-        nama_toko = data.get('Nama_Toko', data.get('nama_toko', 'N/A'))
+        nama_toko = data.get('nama_toko', data.get('Nama_Toko', 'N/A'))
         lingkup_pekerjaan = data.get('Lingkup_Pekerjaan', data.get('lingkup_pekerjaan', 'N/A'))
 
         # --- LOGIC FORMATTING ULOK DIPERBARUI ---
@@ -667,7 +667,8 @@ def submit_rab():
             nomor_ulok_formatted,
             data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, ''),
             cabang_value,
-            data.get(config.COLUMN_NAMES.TIMESTAMP, '')
+            data.get(config.COLUMN_NAMES.TIMESTAMP, ''),
+            data.get(config.COLUMN_NAMES.NAMA_TOKO, '')
         )
 
         # --- 6) SIMPAN KE SHEET ---

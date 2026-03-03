@@ -2696,7 +2696,7 @@ class GoogleServiceProvider:
             print(f"Warning: Baris dengan Nomor Ulok '{nomor_ulok}' dan Lingkup '{lingkup_pekerjaan}' tidak ditemukan di Summary sheet")
     
     # Ke summary Sheet RAB (mode INSERT)
-    def send_status_rab(self, status, nomor_ulok, lingkup_pekerjaan, cabang="", timestamp=""):
+    def send_status_rab(self, status, nomor_ulok, lingkup_pekerjaan, cabang="", timestamp="", nama_toko=""):
         spreadsheet = self.gspread_client.open_by_key(config.OPNAME_SHEET_ID)
 
         # 2. Buka Worksheet Summary
@@ -2709,6 +2709,7 @@ class GoogleServiceProvider:
             'Lingkup_Pekerjaan': lingkup_pekerjaan,
             'Status_Rab': status,
             'Timestamp': timestamp,
+            'Nama_Toko': nama_toko
         }
 
         # Fallback jika variasi nama kolom berbeda di sheet
@@ -2718,6 +2719,8 @@ class GoogleServiceProvider:
             summary_data['Status RAB'] = status
         if 'Status_RAB' in headers and 'Status_Rab' not in headers:
             summary_data['Status_RAB'] = status
+        if 'Nama Toko' in headers and 'Nama_Toko' not in headers:
+            summary_data['Nama Toko'] = nama_toko
 
         data_to_append = [summary_data.get(header, "") for header in headers]
 
