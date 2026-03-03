@@ -2584,21 +2584,43 @@ class GoogleServiceProvider:
                     'Luas Gudang': row_data.get('Luas Gudang', ''),
                     'Total Penawaran Final': row_data.get('Grand Total Final', row_data.get(config.COLUMN_NAMES.GRAND_TOTAL_FINAL, '')),
                     'Kategori': row_data.get('Kategori_Lokasi', row_data.get(config.COLUMN_NAMES.KATEGORI_LOKASI, '')),
+                    'Status_Rab': row_data.get('Status', row_data.get(config.COLUMN_NAMES.STATUS, '')),
                 }
-                
-                # 4. Ambil header dari sheet untuk memastikan urutan yang benar
+
+                # 4. Ambil header dari sheet
                 headers = summary_sheet.row_values(1)
-                
-                # 5. Susun data sesuai urutan header
+
+                # 5. Cari data existing berdasarkan Nomor Ulok + Lingkup_Pekerjaan
+                target_ulok = self._normalize_ulok(summary_data.get('Nomor Ulok', ''))
+                target_lingkup = self._normalize_lingkup(summary_data.get('Lingkup_Pekerjaan', ''))
+
+                all_records = summary_sheet.get_all_records()
+                row_found = None
+                for idx, record in enumerate(all_records):
+                    record_ulok = self._normalize_ulok(record.get('Nomor Ulok', ''))
+                    record_lingkup = self._normalize_lingkup(record.get('Lingkup_Pekerjaan', record.get('Lingkup Pekerjaan', '')))
+                    if record_ulok == target_ulok and record_lingkup == target_lingkup:
+                        row_found = idx + 2  # +2 karena index 0-based dan ada header
+                        break
+
+                # 6. Jika sudah ada, update baris existing
+                if row_found:
+                    for col_name, value in summary_data.items():
+                        if col_name in headers:
+                            col_idx = headers.index(col_name) + 1
+                            summary_sheet.update_cell(row_found, col_idx, value)
+                    print(f"Berhasil update data RAB di sheet Summary untuk Ulok: {summary_data.get('Nomor Ulok', '')}")
+                    return True
+
+                # 7. Jika belum ada, insert baris baru
                 data_to_append = [summary_data.get(header, "") for header in headers]
-                
-                # 6. Simpan ke sheet
+
                 summary_sheet.append_row(
                     data_to_append,
                     value_input_option='USER_ENTERED',
                     insert_data_option='INSERT_ROWS'
                 )
-                print("Berhasil menyalin data RAB ke sheet Summary")
+                print(f"Berhasil insert data RAB ke sheet Summary untuk Ulok: {summary_data.get('Nomor Ulok', '')}")
                 return True
                 
             elif source_type == 'SPK':
