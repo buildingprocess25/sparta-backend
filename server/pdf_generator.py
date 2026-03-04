@@ -77,6 +77,16 @@ def format_rupiah(number):
     except (ValueError, TypeError):
         return "0"
 
+def is_cabang_batam(cabang):
+    if not cabang:
+        return False
+    return str(cabang).strip().upper() == "BATAM"
+
+def calculate_ppn(pembulatan, cabang):
+    if is_cabang_batam(cabang):
+        return 0
+    return pembulatan * 0.11
+
 def parse_flexible_timestamp(ts_string):
     """Membaca berbagai format timestamp dan mengembalikannya sebagai objek datetime."""
     if not ts_string or not isinstance(ts_string, str):
@@ -241,16 +251,16 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
         }
         grouped_items[kategori].append(item_to_add)
     
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
     # Pembulatan turun ke kelipatan 10.000
     pembulatan = math.floor(grand_total / 10000) * 10000
 
-    # PPN 11%
-    ppn = pembulatan * 0.11
+    # PPN 11% (kecuali Cabang BATAM)
+    ppn = calculate_ppn(pembulatan, form_cabang)
 
     # Grand Total Final
     final_grand_total = pembulatan + ppn
-    
-    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
 
     creator_details = ""
     creator_email = form_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
@@ -413,16 +423,16 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
         }
         grouped_items[kategori].append(item_to_add)
     
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
     # Pembulatan turun ke kelipatan 10.000
     pembulatan = math.floor(grand_total / 10000) * 10000
 
-    # PPN 11%
-    ppn = pembulatan * 0.11
+    # PPN 11% (kecuali Cabang BATAM)
+    ppn = calculate_ppn(pembulatan, form_cabang)
 
     # Grand Total Final
     final_grand_total = pembulatan + ppn
-    
-    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
 
     creator_details = ""
     creator_email = form_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
@@ -612,8 +622,10 @@ def create_recap_pdf(google_provider, form_data):
     # Pembulatan: selalu turun (floor) ke kelipatan 10.000 terdekat
     pembulatan = math.floor(grand_total_recap / 10000) * 10000
 
-    # PPN 11%
-    ppn = pembulatan * 0.11
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
+    # PPN 11% (kecuali Cabang BATAM)
+    ppn = calculate_ppn(pembulatan, form_cabang)
 
     # Grand Total Final
     final_grand_total = pembulatan + ppn
@@ -622,7 +634,6 @@ def create_recap_pdf(google_provider, form_data):
     
     # Ambil detail persetujuan (sama seperti di create_pdf_from_data)
     # Catatan: Fungsi get_approval_details_html harus sudah ada di file ini.
-    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
 
     creator_details = get_approval_details_html(
         google_provider, 
@@ -780,8 +791,10 @@ def create_recap_pdf_il(google_provider, form_data):
     # Pembulatan: selalu turun (floor) ke kelipatan 10.000 terdekat
     pembulatan = math.floor(grand_total_recap / 10000) * 10000
 
-    # PPN 11%
-    ppn = pembulatan * 0.11
+    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+
+    # PPN 11% (kecuali Cabang BATAM)
+    ppn = calculate_ppn(pembulatan, form_cabang)
 
     # Grand Total Final
     final_grand_total = pembulatan + ppn
@@ -790,7 +803,6 @@ def create_recap_pdf_il(google_provider, form_data):
     
     # Ambil detail persetujuan (sama seperti di create_pdf_from_data)
     # Catatan: Fungsi get_approval_details_html harus sudah ada di file ini.
-    form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
 
     creator_details = get_approval_details_html(
         google_provider, 
