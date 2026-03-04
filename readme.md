@@ -32,9 +32,12 @@ To get started with the SPARTA backend, follow these steps:
 Configuration
 -------------
 Configuration settings can be found in the `config.py` file. Make sure to adjust the settings according to your environment.
-Contributing
-------------
-Contributions are welcome! Please fork the repository and create a pull request with your changes. Make sure to follow the coding standards and include tests for new features.
-License
--------
-This project is licensed under the MIT License. See the `LICENSE` file for more details. 
+
+Dokumentasi manual alur revisi RAB
+1. Ditolak koordinator
+* Ubah status nya Ditolak oleh Koordinator pada Data form (form2) berdasarkan nomor ulok dan lingkup
+* Ubah statusnya menjadi Active pada spreadsheet Gantt Chart DB (gantt_chart) berdasarkan nomor ulok dan lingkup
+2. Ditolak manager
+* Ubah statusnya Ditolak oleh Manajer pada Data form (form2) berdasarkan nomor ulok dan lingkup
+* Hapus baris data yang masuk pada form3 berdasarkan nomor ulok dan lingkup
+* Ubah statusnya menjadi Active pada spreadsheet Gantt Chart DB (gantt_chart) berdasarkan nomor ulok dan lingkup
