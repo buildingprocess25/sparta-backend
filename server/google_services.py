@@ -2464,11 +2464,16 @@ class GoogleServiceProvider:
 
     def get_email_by_jabatan(self, branch_name, jabatan):
         try:
+            normalized_branch = " ".join(str(branch_name or "").split()).upper()
+            normalized_jabatan = " ".join(str(jabatan or "").split()).upper()
             cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
             for record in cabang_sheet.get_all_records():
-                if branch_name and str(record.get('CABANG', '')).strip().lower() == branch_name.strip().lower() and \
-                   str(record.get('JABATAN', '')).strip().upper() == jabatan.strip().upper():
-                    return record.get('EMAIL_SAT')
+                record_branch = " ".join(str(record.get('CABANG', '')).split()).upper()
+                record_jabatan = " ".join(str(record.get('JABATAN', '')).split()).upper()
+                if normalized_branch and record_branch == normalized_branch and record_jabatan == normalized_jabatan:
+                    email = str(record.get('EMAIL_SAT', '')).strip()
+                    if email:
+                        return email
         except gspread.exceptions.WorksheetNotFound:
             print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
         return None
@@ -2476,11 +2481,14 @@ class GoogleServiceProvider:
     def get_emails_by_jabatan(self, branch_name, jabatan):
         emails = []
         try:
+            normalized_branch = " ".join(str(branch_name or "").split()).upper()
+            normalized_jabatan = " ".join(str(jabatan or "").split()).upper()
             cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
             for record in cabang_sheet.get_all_records():
-                if branch_name and str(record.get('CABANG', '')).strip().lower() == branch_name.strip().lower() and \
-                   str(record.get('JABATAN', '')).strip().upper() == jabatan.strip().upper():
-                    email = record.get('EMAIL_SAT')
+                record_branch = " ".join(str(record.get('CABANG', '')).split()).upper()
+                record_jabatan = " ".join(str(record.get('JABATAN', '')).split()).upper()
+                if normalized_branch and record_branch == normalized_branch and record_jabatan == normalized_jabatan:
+                    email = str(record.get('EMAIL_SAT', '')).strip()
                     if email:
                         emails.append(email)
         except gspread.exceptions.WorksheetNotFound:

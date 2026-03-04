@@ -76,6 +76,41 @@ def log_app(func: str, message: str, **kwargs):
     extra = " | ".join(f"{k}={v}" for k, v in kwargs.items()) if kwargs else ""
     print(f"[APP][{func}] {ts} - {message}{' | ' + extra if extra else ''}")
 
+
+def _normalize_text(value):
+    return str(value or "").strip()
+
+
+def _extract_cabang(row_data):
+    if not isinstance(row_data, dict):
+        return ""
+    return _normalize_text(
+        row_data.get(config.COLUMN_NAMES.CABANG)
+        or row_data.get('Cabang')
+        or row_data.get('cabang')
+    )
+
+
+def _is_valid_approver_for_branch(level, approver_email, cabang):
+    level_map = {
+        'coordinator': config.JABATAN.KOORDINATOR,
+        'manager': config.JABATAN.MANAGER,
+    }
+    jabatan_target = level_map.get(_normalize_text(level).lower())
+    approver_norm = _normalize_text(approver_email).lower()
+    cabang_norm = _normalize_text(cabang)
+
+    if not jabatan_target or not approver_norm or not cabang_norm:
+        return False
+
+    expected_emails = google_provider.get_emails_by_jabatan(cabang_norm, jabatan_target)
+    expected_emails_norm = {
+        _normalize_text(email).lower()
+        for email in expected_emails
+        if _normalize_text(email)
+    }
+    return approver_norm in expected_emails_norm
+
 # --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---
 GAS_URLS = {
   "input-pic": "https://script.google.com/macros/s/AKfycbzMWfroqPvtZXA1gz5VqdUzJhtyV_q8hWH92gl7JqFct5_dTVI2mcwmDHY6Rac5vmu-ww/exec",
@@ -958,6 +993,7 @@ def submit_rab_kedua():
             raise Exception("Field 'Cabang' is empty.")
 
         coordinator_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.KOORDINATOR)
+        log_app("submit_rab_kedua", "coordinator recipients resolved", cabang=cabang, count=len(coordinator_emails))
         if not coordinator_emails:
             raise Exception(f"Tidak ada email Koordinator untuk cabang '{cabang}'.")
 
@@ -1132,10 +1168,26 @@ def handle_rab_approval():
         WIB = timezone(timedelta(hours=7))
         current_time = datetime.datetime.now(WIB).isoformat()
         
-        cabang = row_data.get(config.COLUMN_NAMES.CABANG)
+        cabang = _extract_cabang(row_data)
         jenis_toko = row_data.get(config.COLUMN_NAMES.PROYEK, 'N/A')
         nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
         lingkup_pekerjaan = row_data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, 'N/A')
+
+        if not _is_valid_approver_for_branch(level, approver, cabang):
+            log_app(
+                "handle_rab_approval",
+                "unauthorized approver",
+                row=row,
+                level=level,
+                approver=approver,
+                cabang=cabang,
+            )
+            return render_template(
+                'response_page.html',
+                title='Aksi Ditolak',
+                message='Email approver tidak sesuai cabang/jabatan dokumen ini.',
+                logo_url=logo_url,
+            ), 403
 
         creator_email = row_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
 
@@ -1219,6 +1271,7 @@ def handle_rab_approval():
             row_data[config.COLUMN_NAMES.LINK_PDF] = link_pdf_merged
 
             manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
+            log_app("handle_rab_approval", "manager recipients resolved", row=row, cabang=cabang, count=len(manager_emails))
             if manager_emails:
                 base_url = "https://sparta-backend-5hdj.onrender.com"
 
@@ -1389,6 +1442,23 @@ def handle_rab_2_approval():
             log_app("handle_rab_2_approval", "row not found", row=row)
             return "Data tidak ditemukan", 404
 
+        cabang = _extract_cabang(row_data)
+        if not _is_valid_approver_for_branch(level, approver, cabang):
+            log_app(
+                "handle_rab_2_approval",
+                "unauthorized approver",
+                row=row,
+                level=level,
+                approver=approver,
+                cabang=cabang,
+            )
+            return render_template(
+                'response_page.html',
+                title='Aksi Ditolak',
+                message='Email approver tidak sesuai cabang/jabatan dokumen ini.',
+                logo_url=logo_url,
+            ), 403
+
         WIB = timezone(timedelta(hours=7))
         current_time = datetime.datetime.now(WIB).isoformat()
         
@@ -1437,8 +1507,9 @@ def handle_rab_2_approval():
                 row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
 
                 # 3. Cari Email Manager
-                cabang = row_data.get('Cabang')
+                cabang = _extract_cabang(row_data)
                 manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
+                log_app("handle_rab_2_approval", "manager recipients resolved", row=row, cabang=cabang, count=len(manager_emails))
                 
                 if manager_emails:
                     base_url = "https://sparta-backend-5hdj.onrender.com" 
