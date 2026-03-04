@@ -14,17 +14,42 @@ except locale.Error:
     except locale.Error:
         print("Peringatan: Locale Bahasa Indonesia tidak ditemukan.")
 
-def get_nama_lengkap_by_email(google_provider, email):
-    if not email: return ""
+def get_nama_lengkap_by_email(google_provider, email, cabang=None, expected_jabatan=None):
+    if not email:
+        return ""
+
+    normalized_email = str(email).strip().lower()
+    normalized_cabang = str(cabang).strip().lower() if cabang else None
+    normalized_jabatan = str(expected_jabatan).strip().upper() if expected_jabatan else None
+    fallback_name = ""
+
     try:
         cabang_sheet = google_provider.sheet.worksheet(config.CABANG_SHEET_NAME)
         records = cabang_sheet.get_all_records()
+
         for record in records:
-            if str(record.get('EMAIL_SAT', '')).strip().lower() == str(email).strip().lower():
-                return record.get('NAMA LENGKAP', '').strip()
+            record_email = str(record.get('EMAIL_SAT', '')).strip().lower()
+            if record_email != normalized_email:
+                continue
+
+            record_name = str(record.get('NAMA LENGKAP', '')).strip()
+            record_cabang = str(record.get('CABANG', '')).strip().lower()
+            record_jabatan = str(record.get('JABATAN', '')).strip().upper()
+
+            if not fallback_name:
+                fallback_name = record_name
+
+            if normalized_cabang and record_cabang != normalized_cabang:
+                continue
+
+            if normalized_jabatan and record_jabatan != normalized_jabatan:
+                continue
+
+            return record_name
     except Exception as e:
         print(f"Error getting name for email {email}: {e}")
-    return email
+
+    return fallback_name or email
 
 def parse_flexible_timestamp(ts_string):
     if not ts_string or not isinstance(ts_string, str):
@@ -40,14 +65,25 @@ def parse_flexible_timestamp(ts_string):
             continue
     return None
 
-def create_approval_details_block(google_provider, approver_email, approval_time_str):
-    if not approver_email:
+def create_approval_details_block(google_provider, approver_value, approval_time_str, cabang=None, expected_jabatan=None):
+    if not approver_value:
         return ""
-    approver_name = get_nama_lengkap_by_email(google_provider, approver_email)
+
+    approver_value_str = str(approver_value).strip()
+    if "@" in approver_value_str:
+        approver_name = get_nama_lengkap_by_email(
+            google_provider,
+            approver_value_str,
+            cabang=cabang,
+            expected_jabatan=expected_jabatan
+        )
+    else:
+        approver_name = approver_value_str
+
     approval_dt = parse_flexible_timestamp(approval_time_str)
     formatted_time = approval_dt.strftime('%d %B %Y, %H:%M WIB') if approval_dt else "Waktu tidak tersedia"
     
-    name_display = f"<strong>( {approver_name} )</strong><br>" if approver_name else f"<strong>( {approver_email} )</strong><br>"
+    name_display = f"<strong>( {approver_name} )</strong><br>" if approver_name else f"<strong>( {approver_value_str} )</strong><br>"
     return f"""
     <div class="approval-details">
         {name_display}
@@ -56,15 +92,41 @@ def create_approval_details_block(google_provider, approver_email, approval_time
     """
 
 def create_spk_pdf(google_provider, spk_data):
+    cabang = spk_data.get('Cabang')
+
     initiator_email = spk_data.get('Dibuat Oleh')
+    initiator_name = (
+        spk_data.get('Dibuat Oleh Nama') or
+        spk_data.get('Nama Dibuat Oleh') or
+        spk_data.get('Nama Pembuat') or
+        initiator_email
+    )
     initiator_timestamp = spk_data.get('Timestamp') 
     
     approver_email = spk_data.get('Disetujui Oleh')
+    approver_name = (
+        spk_data.get('Disetujui Oleh Nama') or
+        spk_data.get('Nama Disetujui Oleh') or
+        spk_data.get('Nama Branch Manager') or
+        approver_email
+    )
     approval_time = spk_data.get('Waktu Persetujuan') 
 
-    initiator_details_html = create_approval_details_block(google_provider, initiator_email, initiator_timestamp)
+    initiator_details_html = create_approval_details_block(
+        google_provider,
+        initiator_name,
+        initiator_timestamp,
+        cabang=cabang,
+        expected_jabatan=config.JABATAN.MANAGER
+    )
     
-    approver_details_html = create_approval_details_block(google_provider, approver_email, approval_time)
+    approver_details_html = create_approval_details_block(
+        google_provider,
+        approver_name,
+        approval_time,
+        cabang=cabang,
+        expected_jabatan=config.JABATAN.BRANCH_MANAGER
+    )
 
     start_date_obj = datetime.fromisoformat(spk_data.get('Waktu Mulai'))
     duration = int(spk_data.get('Durasi'))
