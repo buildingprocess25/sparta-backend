@@ -3002,6 +3002,7 @@ class GoogleServiceProvider:
             print(f"Error getting approved RABs: {e}")
             raise e
 
+    # KONTRAKTOR LIST FOR SPK
     def get_kontraktor_by_cabang(self, user_cabang):
         try:
             kontraktor_sheet_object = self.gspread_client.open_by_key(config.KONTRAKTOR_SHEET_ID)
@@ -3025,7 +3026,8 @@ class GoogleServiceProvider:
         except Exception as e:
             print(f"Error getting contractors: {e}")
             raise e
-    
+    # AKHIR KONTRAKTOR LIST FOR SPK
+
     def update_row(self, sheet_name, row_index, data_dict):
         """
         Update seluruh nilai 1 baris berdasarkan dictionary key=columnName.

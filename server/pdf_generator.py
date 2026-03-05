@@ -252,6 +252,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
         grouped_items[kategori].append(item_to_add)
     
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+    is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
 
     # Pembulatan turun ke kelipatan 10.000
     pembulatan = math.floor(grand_total / 10000) * 10000
@@ -341,7 +342,8 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
         manager_approval_details=manager_approval_details,
         format_rupiah=format_rupiah,
         tanggal_pengajuan=tanggal_pengajuan_str,
-        nama_pt=nama_pt_found
+        nama_pt=nama_pt_found,
+        is_batam_branch=is_batam_branch
     )
 
     return HTML(string=html_string).write_pdf()
@@ -424,6 +426,7 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
         grouped_items[kategori].append(item_to_add)
     
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+    is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
 
     # Pembulatan turun ke kelipatan 10.000
     pembulatan = math.floor(grand_total / 10000) * 10000
@@ -623,6 +626,7 @@ def create_recap_pdf(google_provider, form_data):
     pembulatan = math.floor(grand_total_recap / 10000) * 10000
 
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
+    is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
 
     # PPN 11% (kecuali Cabang BATAM)
     ppn = calculate_ppn(pembulatan, form_cabang)
@@ -707,7 +711,8 @@ def create_recap_pdf(google_provider, form_data):
         pembulatan_formatted=format_rupiah(pembulatan),
         ppn_formatted=format_rupiah(ppn),
         final_total_formatted=format_rupiah(final_grand_total),
-        nama_pt=nama_pt_found
+        nama_pt=nama_pt_found,
+        is_batam_branch=is_batam_branch
     )
     
     return HTML(string=html_string).write_pdf()

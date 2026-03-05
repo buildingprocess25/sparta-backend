@@ -153,6 +153,10 @@
             vertical-align: top;
         }
 
+        .signatures.batam-two-cols .signature-box {
+            width: 50%;
+        }
+
         .signature-box .title {
             font-size: 11px;
             margin-bottom: 5px;
@@ -354,7 +358,7 @@
         </table>
         <div style="clear: both;"></div>
 
-        <div class="signatures">
+        <div class="signatures{% if is_batam_branch %} batam-two-cols{% endif %}">
             <div class="signature-box">
                 <p class="title">Dibuat</p>
                 <div class="signature-content">
@@ -364,13 +368,14 @@
                 <p class="jabatan">{{ JABATAN.KONTRAKTOR }}</p>
             </div>
             <div class="signature-box">
-                <p class="title">Mengetahui</p>
+                <p class="title">{{ 'Menyetujui' if is_batam_branch else 'Mengetahui' }}</p>
                 <div class="signature-content">
                     {{ coordinator_approval_details | safe }}
                     <div class="signature-line"></div>
                 </div>
                 <p class="jabatan">{{ JABATAN.KOORDINATOR }}</p>
             </div>
+            {% if not is_batam_branch %}
             <div class="signature-box">
                 <p class="title">Menyetujui</p>
                 <div class="signature-content">
@@ -379,6 +384,7 @@
                 </div>
                 <p class="jabatan">{{ JABATAN.MANAGER }}</p>
             </div>
+            {% endif %}
         </div>
     </div>
 </body>
