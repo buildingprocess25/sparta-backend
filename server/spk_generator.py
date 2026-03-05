@@ -93,6 +93,9 @@ def create_approval_details_block(google_provider, approver_value, approval_time
 
 def create_spk_pdf(google_provider, spk_data):
     cabang = spk_data.get('Cabang')
+    is_batam_branch = str(cabang or '').strip().upper() == 'BATAM'
+    initiator_jabatan = config.JABATAN.KOORDINATOR if is_batam_branch else config.JABATAN.MANAGER
+    initiator_role_title = 'Branch Building Coordinator' if is_batam_branch else 'Branch Building & Maintenance Manager'
 
     initiator_email = spk_data.get('Dibuat Oleh')
     initiator_name = (
@@ -117,7 +120,7 @@ def create_spk_pdf(google_provider, spk_data):
         initiator_name,
         initiator_timestamp,
         cabang=cabang,
-        expected_jabatan=config.JABATAN.MANAGER
+        expected_jabatan=initiator_jabatan
     )
     
     approver_details_html = create_approval_details_block(
@@ -156,7 +159,8 @@ def create_spk_pdf(google_provider, spk_data):
         "end_date": end_date_formatted,
         "duration": duration,
         "initiator_details_html": initiator_details_html,
-        "approver_details_html": approver_details_html
+        "approver_details_html": approver_details_html,
+        "initiator_role_title": initiator_role_title
     }
     
     html_string = render_template('spk_template.html', **template_context)

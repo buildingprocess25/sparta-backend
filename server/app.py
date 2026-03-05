@@ -3076,12 +3076,13 @@ def handle_spk_approval():
             manager_email = google_provider.get_email_by_jabatan(cabang, config.JABATAN.MANAGER)
             support_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.SUPPORT)
             coordinator_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.KOORDINATOR)
+            is_batam_spk = _is_batam_branch(cabang)
 
             # Cari email spesifik pembuat RAB menggunakan Ulok DAN Lingkup Pekerjaan
             pembuat_rab_email = google_provider.get_rab_creator_by_ulok(nomor_ulok_spk, lingkup_pekerjaan) if nomor_ulok_spk else None
 
             bm_email = approver
-            bbm_manager_email = manager_email
+            bbm_manager_email = None if is_batam_spk else manager_email
             
             kontraktor_list = []
             if pembuat_rab_email:
@@ -3106,12 +3107,12 @@ def handle_spk_approval():
             google_provider.send_email(to=[bm_email], subject=subject, html_body=body_bm, attachments=email_attachments)
 
             if bbm_manager_email:
-                 link_input_pic = f"<p>Silakan melakukan input PIC pengawasan melalui link berikut: <a href='https://frontend-form-virid.vercel.app/login-input_pic.html' target='_blank' rel='noopener noreferrer'>Input PIC Pengawasan</a></p>"
-                 body_bbm = (f"<p>SPK yang diajukan untuk Toko <b>{nama_toko}</b> pada proyek <b>{jenis_toko} - {lingkup_pekerjaan}</b> ({row_data.get('Nomor Ulok')}) telah disetujui oleh Branch Manager.</p>"
-                             f"{link_input_pic}"
-                             f"<p>File PDF final terlampir.</p>")
-                 google_provider.send_email(to=[bbm_manager_email], subject=subject, html_body=body_bbm, attachments=email_attachments)
-                 other_recipients.discard(bbm_manager_email)
+                link_input_pic = f"<p>Silakan melakukan input PIC pengawasan melalui link berikut: <a href='https://frontend-form-virid.vercel.app/login-input_pic.html' target='_blank' rel='noopener noreferrer'>Input PIC Pengawasan</a></p>"
+                body_bbm = (f"<p>SPK yang diajukan untuk Toko <b>{nama_toko}</b> pada proyek <b>{jenis_toko} - {lingkup_pekerjaan}</b> ({row_data.get('Nomor Ulok')}) telah disetujui oleh Branch Manager.</p>"
+                            f"{link_input_pic}"
+                            f"<p>File PDF final terlampir.</p>")
+                google_provider.send_email(to=[bbm_manager_email], subject=subject, html_body=body_bbm, attachments=email_attachments)
+                other_recipients.discard(bbm_manager_email)
 
             if coordinator_emails:
                 body_coord = (f"<p>SPK untuk Toko <b>{nama_toko}</b> pada proyek <b>{jenis_toko} - {lingkup_pekerjaan}</b> ({row_data.get('Nomor Ulok')}) telah disetujui oleh Branch Manager.</p>"
