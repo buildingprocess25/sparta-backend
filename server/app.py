@@ -91,6 +91,10 @@ def _extract_cabang(row_data):
     )
 
 
+def _is_batam_branch(cabang):
+    return _normalize_text(cabang).upper() == "BATAM"
+
+
 def _is_valid_approver_for_branch(level, approver_email, cabang):
     level_map = {
         'coordinator': config.JABATAN.KOORDINATOR,
@@ -1269,6 +1273,84 @@ def handle_rab_approval():
             row_data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
             row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
             row_data[config.COLUMN_NAMES.LINK_PDF] = link_pdf_merged
+
+            # Khusus Cabang BATAM
+            if _is_batam_branch(cabang):
+                if not google_provider.update_cell(row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED):
+                    raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row}")
+
+                row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.APPROVED
+
+                if not google_provider.copy_to_approved_sheet(row_data):
+                    raise RuntimeError(f"Gagal menyalin data row {row} ke {config.APPROVED_DATA_SHEET_NAME}")
+
+                email_pembuat = row_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
+                kontraktor_emails = [email_pembuat] if email_pembuat else []
+                coordinator_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.KOORDINATOR)
+                final_approver_email = approver
+
+                email_attachments = [(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
+                subject = f"[FINAL - DISETUJUI] Pengajuan RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}"
+
+                base_body = (
+                    f"<p>Pengajuan RAB Toko <b>{nama_toko}</b> untuk proyek <b>{jenis_toko} - {lingkup_pekerjaan}</b> "
+                    f"telah disetujui sepenuhnya.</p>"
+                    f"<p>File PDF RAB gabungan telah dilampirkan:</p>"
+                    f"<ul>"
+                    f"<li><b>{pdf_merged_filename}</b>: Gabungan PDF Non-SBO dan Rekapitulasi.</li>"
+                    f"</ul>"
+                    f"<p>Link Google Drive:</p>"
+                    f"<ul>"
+                    f"<li><a href='{link_pdf_merged}'>Link PDF Gabungan</a></li>"
+                    f"</ul>"
+                )
+
+                if kontraktor_emails:
+                    kontraktor_body = (
+                        base_body +
+                        f"<p>Silakan upload Rekapitulasi RAB Termaterai & SPH melalui link berikut:</p>"
+                        f"<p><a href='https://materai-rab-pi.vercel.app/login' "
+                        f"target='_blank'>UPLOAD REKAP RAB TERMATERAI & SPH</a></p>"
+                    )
+
+                    google_provider.send_email(
+                        to=kontraktor_emails,
+                        subject=subject,
+                        html_body=kontraktor_body,
+                        attachments=email_attachments
+                    )
+
+                if coordinator_emails:
+                    google_provider.send_email(
+                        to=coordinator_emails,
+                        subject=subject,
+                        html_body=base_body,
+                        attachments=email_attachments
+                    )
+
+                if final_approver_email:
+                    google_provider.send_email(
+                        to=[final_approver_email],
+                        subject=subject,
+                        html_body=base_body,
+                        attachments=email_attachments
+                    )
+
+                log_app(
+                    "handle_rab_approval",
+                    "approved by coordinator (batam shortcut)",
+                    row=row,
+                    approver=approver,
+                    status=config.STATUS.APPROVED,
+                )
+
+                return render_template(
+                    'response_page.html',
+                    title='Persetujuan Berhasil',
+                    message='Terima kasih. Persetujuan koordinator untuk cabang BATAM telah dicatat dan langsung disetujui.',
+                    logo_url=logo_url,
+                )
+            # Akhir khusus BATAM
 
             manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
             log_app("handle_rab_approval", "manager recipients resolved", row=row, cabang=cabang, count=len(manager_emails))
