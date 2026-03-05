@@ -30,6 +30,7 @@ OPNAME_SHEET_ID = "1ssXGBJ-D4O8JVB1emOBuqcdmBKvdymciVsv7eMaBb64"
 GANTT_SPREADSHEET_ID = os.getenv("GANTT_SPREADSHEET_ID", SPREADSHEET_ID)
 
 # ID Spreadsheet untuk Penyimpanan Dokumen
+DOC_ID_PENYIMPANAN_DOKUMEN = os.getenv("DOC_ID_PENYIMPANAN_DOKUMEN", "1bEslAY1gGm1QgYl_ZL88_rt5z-errU7HU3GkqbWcNOw")
 DOC_DRIVE_ROOT_ID = os.getenv("DRIVE_ROOT_ID", "14hjuP33ez1v1WDxkTi7A3k-XfKOZKVTc") # ID Folder Root Drive Penyimpanan
 DOC_SHEET_NAME = os.getenv("SHEET_NAME", "penyimpanan_dokumen")
 

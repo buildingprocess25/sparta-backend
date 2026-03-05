@@ -110,12 +110,15 @@ class GoogleServiceProvider:
             # Service Dokumen (Variabel pakai prefix 'doc_')
             self.doc_gspread_client = gspread.authorize(self.doc_creds)
             
-            if getattr(config, 'SPREADSHEET_ID', None):
-                # Note: Ini sepertinya pakai ID sheet Sparta juga? Sesuaikan jika beda.
+            doc_spreadsheet_id = getattr(config, 'DOC_ID_PENYIMPANAN_DOKUMEN', None)
+            if doc_spreadsheet_id:
                 self.doc_sheet = self._with_google_retry(
-                    lambda: self.doc_gspread_client.open_by_key(config.SPREADSHEET_ID),
+                    lambda: self.doc_gspread_client.open_by_key(doc_spreadsheet_id),
                     op_name="doc_open_sheet",
                 )
+            else:
+                print("⚠️ Warning: DOC_ID_PENYIMPANAN_DOKUMEN belum ada di config.")
+                self.doc_sheet = None
             
             self.doc_drive_service = build('drive', 'v3', credentials=self.doc_creds)
             print("✅ Service Dokumen (Existing) Berhasil.")
