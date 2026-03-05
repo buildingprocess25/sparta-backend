@@ -3003,7 +3003,7 @@ class GoogleServiceProvider:
             raise e
 
     # KONTRAKTOR LIST FOR SPK
-    def get_kontraktor_by_cabang(self, user_cabang):
+    def get_kontraktor_by_cabang(self, user_wilayah):
         try:
             kontraktor_sheet_object = self.gspread_client.open_by_key(config.KONTRAKTOR_SHEET_ID)
             worksheet = kontraktor_sheet_object.worksheet(config.KONTRAKTOR_SHEET_NAME)
@@ -3014,10 +3014,10 @@ class GoogleServiceProvider:
             headers = all_values[1]
             records = [dict(zip(headers, row)) for row in all_values[2:]]
             
-            allowed_branches_lower = user_cabang.strip().lower()
+            allowed_branches_lower = user_wilayah.strip().lower()
             kontraktor_list = []
             for record in records:
-                if str(record.get('NAMA CABANG', '')).strip().lower() == allowed_branches_lower and \
+                if str(record.get('WILAYAH', '')).strip().lower() == allowed_branches_lower and \
                    str(record.get('STATUS KONTRAKTOR', '')).strip().upper() == 'AKTIF':
                     nama_kontraktor = str(record.get('NAMA KONTRAKTOR', '')).strip()
                     if nama_kontraktor and nama_kontraktor not in kontraktor_list:
