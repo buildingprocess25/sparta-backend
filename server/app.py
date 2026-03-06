@@ -291,6 +291,24 @@ def get_tanggal_h(start_date, jumlah_hari_kerja):
             count += 1
     return tanggal
 
+def get_pt_name_by_email(provider, email):
+    if not email: return "NAMA PT TIDAK DITEMUKAN"
+    try:
+        # Mengakses sheet Cabang
+        cabang_sheet = provider.sheet.worksheet(config.CABANG_SHEET_NAME)
+        records = cabang_sheet.get_all_records()
+        
+        # Loop cari email yang cocok
+        for record in records:
+            # Pastikan nama kolom email di sheet Cabang sesuai (misal: 'EMAIL_SAT')
+            record_email = str(record.get('EMAIL_SAT', '')).strip().lower()
+            if record_email == str(email).strip().lower():
+                # Pastikan nama kolom PT di sheet Cabang sesuai (misal: 'Nama_PT' atau 'NAMA PT')
+                return record.get('Nama_PT', '').strip() or record.get('NAMA PT', '').strip()
+    except Exception as e:
+        log_app("get_pt_name_by_email", "error", email=email, error=str(e))
+    return "NAMA PT TIDAK DITEMUKAN"
+
 @app.route('/')
 def index():
     log_app("index", "health check")
@@ -309,8 +327,12 @@ def login():
     try:
         is_valid, role = google_provider.validate_user(email, cabang)
         if is_valid:
-            log_app("login", "success", email=email, role=role)
-            return jsonify({"status": "success", "message": "Login successful", "role": role}), 200
+            nama_pt = get_pt_name_by_email(google_provider, email)
+            if not nama_pt:
+                log_app("login", "nama PT not found", email=email)
+                nama_pt = "NAMA PT TIDAK DITEMUKAN"
+            log_app("login", "success", email=email, role=role, nama_pt=nama_pt)
+            return jsonify({"status": "success", "message": "Login successful", "role": role, "nama_pt": nama_pt}), 200
         else:
             registered_user = google_provider.get_nama_lengkap_dan_cabang_by_email(email)
             if not registered_user:
@@ -357,23 +379,7 @@ def check_status_rab_2():
         log_app("check_status_rab_2", "error", error=str(e))
         return jsonify({"error": str(e)}), 500
 
-def get_pt_name_by_email(provider, email):
-    if not email: return "NAMA PT TIDAK DITEMUKAN"
-    try:
-        # Mengakses sheet Cabang
-        cabang_sheet = provider.sheet.worksheet(config.CABANG_SHEET_NAME)
-        records = cabang_sheet.get_all_records()
-        
-        # Loop cari email yang cocok
-        for record in records:
-            # Pastikan nama kolom email di sheet Cabang sesuai (misal: 'EMAIL_SAT')
-            record_email = str(record.get('EMAIL_SAT', '')).strip().lower()
-            if record_email == str(email).strip().lower():
-                # Pastikan nama kolom PT di sheet Cabang sesuai (misal: 'Nama_PT' atau 'NAMA PT')
-                return record.get('Nama_PT', '').strip() or record.get('NAMA PT', '').strip()
-    except Exception as e:
-        log_app("get_pt_name_by_email", "error", email=email, error=str(e))
-    return "NAMA PT TIDAK DITEMUKAN"
+
 
 @app.route('/api/check_ulok_rab_2', methods=['GET'])
 def check_ulok_rab_2():
