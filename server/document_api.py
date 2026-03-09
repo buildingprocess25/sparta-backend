@@ -249,7 +249,16 @@ def save_document_base64():
             mime_type = guess_mime(filename, f.get("type"))
             
             try:
-                raw = decode_base64_maybe_with_prefix(f.get("data") or "")
+                data_value = f.get("data") or ""
+                if not data_value:
+                    log_doc("save_document_base64", "skip empty file payload", filename=filename, category=category)
+                    continue
+
+                raw = decode_base64_maybe_with_prefix(data_value)
+                if not raw:
+                    log_doc("save_document_base64", "skip zero-byte decoded file", filename=filename, category=category)
+                    continue
+
                 uploaded = provider.upload_file_simple(
                     folder_id=category_folders[category],
                     filename=filename,
@@ -460,44 +469,75 @@ def update_document(kode_toko):
             if key not in deleted_keys and key not in new_upload_filenames:
                 new_file_links.append(f"{old_file['category']}|{old_file['filename']}|{old_file['link']}")
 
+        failed_uploads = 0
+
         # 2. Upload file baru
         for f in files_to_upload:
             category = (f.get("category") or "pendukung").strip()
             filename = f.get("filename")
-            
-            # Pastikan folder kategori ada
-            if category not in category_cache:
-                category_cache[category] = provider.get_or_create_folder(category, toko_folder_id)
-            
-            # Hapus file lama dengan nama sama jika ada (replace)
-            old_drive_file = next(
-                (df for df in existing_files_drive if df["category"] == category and df["name"] == filename),
-                None
-            )
-            if old_drive_file:
-                try:
-                    provider.doc_drive_service.files().delete(fileId=old_drive_file["id"]).execute()
-                    log_doc("update_document", "replace existing file", filename=filename, category=category)
-                except Exception as e:
-                    log_doc("update_document", "replace delete failed", filename=filename, category=category, error=str(e))
-            
-            raw = decode_base64_maybe_with_prefix(f["data"])
-            mime = guess_mime(filename, f.get("type"))
-            
-            uploaded = provider.upload_file_simple(category_cache[category], filename, mime, raw)
-            
-            # Buat Link
-            link = uploaded.get("webViewLink")
-            fid = link.split("/d/")[-1].split("/")[0] if link else ""
-            direct = f"https://drive.google.com/uc?export=view&id={fid}" if fid else ""
-            
-            new_file_links.append(f"{category}|{filename}|{direct}")
+
+            if not filename:
+                failed_uploads += 1
+                log_doc("update_document", "skip upload without filename", category=category)
+                continue
+
+            try:
+                # Pastikan folder kategori ada
+                if category not in category_cache:
+                    category_cache[category] = provider.get_or_create_folder(category, toko_folder_id)
+
+                # Hapus file lama dengan nama sama jika ada (replace)
+                old_drive_file = next(
+                    (df for df in existing_files_drive if df["category"] == category and df["name"] == filename),
+                    None
+                )
+                if old_drive_file:
+                    try:
+                        provider.doc_drive_service.files().delete(fileId=old_drive_file["id"]).execute()
+                        log_doc("update_document", "replace existing file", filename=filename, category=category)
+                    except Exception as e:
+                        log_doc("update_document", "replace delete failed", filename=filename, category=category, error=str(e))
+
+                data_value = f.get("data") or ""
+                if not data_value:
+                    failed_uploads += 1
+                    log_doc("update_document", "skip empty file payload", filename=filename, category=category)
+                    continue
+
+                raw = decode_base64_maybe_with_prefix(data_value)
+                if not raw:
+                    failed_uploads += 1
+                    log_doc("update_document", "skip zero-byte decoded file", filename=filename, category=category)
+                    continue
+
+                mime = guess_mime(filename, f.get("type"))
+                uploaded = provider.upload_file_simple(category_cache[category], filename, mime, raw)
+
+                # Buat Link
+                link = uploaded.get("webViewLink")
+                fid = link.split("/d/")[-1].split("/")[0] if link else ""
+                direct = f"https://drive.google.com/uc?export=view&id={fid}" if fid else ""
+
+                new_file_links.append(f"{category}|{filename}|{direct}")
+            except Exception as upload_err:
+                failed_uploads += 1
+                log_doc(
+                    "update_document",
+                    "upload failed",
+                    filename=filename,
+                    category=category,
+                    error=str(upload_err),
+                )
+
+        uploaded_success = max(0, len(files_to_upload) - failed_uploads)
+        kept_count = max(0, len(new_file_links) - uploaded_success)
 
         log_doc(
             "update_document",
             "upload completed",
-            uploaded=len(files_to_upload),
-            kept=len(new_file_links) - len(files_to_upload),
+            uploaded=uploaded_success,
+            kept=kept_count,
+            failed=failed_uploads,
         )
 
         # Update Sheet
