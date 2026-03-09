@@ -46,7 +46,41 @@ class GoogleServiceProvider:
                 )
                 time.sleep(delay)
 
+    def _get_cabang_records(self, force_refresh=False):
+        """Read CABANG sheet records with short-lived cache to reduce quota usage."""
+        cache_key = "cabang_records"
+        cache_ttl_seconds = 120
+        now = time.time()
+
+        cached_entry = getattr(self, "_record_cache", {}).get(cache_key)
+        if (
+            not force_refresh
+            and cached_entry
+            and (now - cached_entry.get("timestamp", 0)) < cache_ttl_seconds
+        ):
+            return cached_entry.get("records", [])
+
+        try:
+            cabang_sheet = self._with_google_retry(
+                lambda: self.sheet.worksheet(config.CABANG_SHEET_NAME),
+                op_name="cabang_open_worksheet",
+            )
+            records = self._with_google_retry(
+                lambda: cabang_sheet.get_all_records(),
+                op_name="cabang_get_all_records",
+            )
+            self._record_cache[cache_key] = {"timestamp": now, "records": records}
+            return records
+        except Exception:
+            # If refresh fails but stale cache exists, keep service available.
+            if cached_entry and cached_entry.get("records"):
+                print("⚠️ Gagal refresh CABANG sheet, memakai cache lama sementara.")
+                return cached_entry.get("records", [])
+            raise
+
     def __init__(self):
+        self._record_cache = {}
+
         # ==========================================
         # 1. SCOPES DEFINITION
         # ==========================================
@@ -2313,14 +2347,26 @@ class GoogleServiceProvider:
 
     def validate_user(self, email, cabang):
         try:
-            cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
-            for record in cabang_sheet.get_all_records():
+            for record in self._get_cabang_records():
                 if str(record.get('EMAIL_SAT', '')).strip().lower() == email.lower() and \
                    str(record.get('CABANG', '')).strip().lower() == cabang.lower():
                     return True, record.get('JABATAN', '')
         except gspread.exceptions.WorksheetNotFound:
             print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
         return False, None
+
+    def get_pt_name_by_email(self, email):
+        if not email:
+            return ""
+
+        try:
+            normalized_email = str(email).strip().lower()
+            for record in self._get_cabang_records():
+                if str(record.get('EMAIL_SAT', '')).strip().lower() == normalized_email:
+                    return (record.get('Nama_PT', '') or record.get('NAMA PT', '') or '').strip()
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"Error: Worksheet '{config.CABANG_SHEET_NAME}' not found.")
+        return ""
 
     def check_user_submissions(self, email, cabang):
         try:
@@ -3246,8 +3292,7 @@ class GoogleServiceProvider:
 
     def get_nama_lengkap_dan_cabang_by_email(self, email):
         try:
-            cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
-            for record in cabang_sheet.get_all_records():
+            for record in self._get_cabang_records():
                 if str(record.get('EMAIL_SAT', '')).strip().lower() == email.lower():
                     return record.get('NAMA LENGKAP'), record.get('CABANG')
         except gspread.exceptions.WorksheetNotFound:

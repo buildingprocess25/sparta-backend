@@ -294,17 +294,9 @@ def get_tanggal_h(start_date, jumlah_hari_kerja):
 def get_pt_name_by_email(provider, email):
     if not email: return "NAMA PT TIDAK DITEMUKAN"
     try:
-        # Mengakses sheet Cabang
-        cabang_sheet = provider.sheet.worksheet(config.CABANG_SHEET_NAME)
-        records = cabang_sheet.get_all_records()
-        
-        # Loop cari email yang cocok
-        for record in records:
-            # Pastikan nama kolom email di sheet Cabang sesuai (misal: 'EMAIL_SAT')
-            record_email = str(record.get('EMAIL_SAT', '')).strip().lower()
-            if record_email == str(email).strip().lower():
-                # Pastikan nama kolom PT di sheet Cabang sesuai (misal: 'Nama_PT' atau 'NAMA PT')
-                return record.get('Nama_PT', '').strip() or record.get('NAMA PT', '').strip()
+        pt_name = provider.get_pt_name_by_email(email)
+        if pt_name:
+            return pt_name
     except Exception as e:
         log_app("get_pt_name_by_email", "error", email=email, error=str(e))
     return "NAMA PT TIDAK DITEMUKAN"
