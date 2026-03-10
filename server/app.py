@@ -2713,8 +2713,8 @@ def submit_spk():
     try:
         log_app("submit_spk", "request received", ulok=data.get("Nomor Ulok"), lingkup=data.get("Lingkup Pekerjaan"))
         if not is_revision:
-            incoming_ulok = data.get("Nomor Ulok", "")
-            incoming_lingkup = data.get("Lingkup Pekerjaan", "")
+            incoming_ulok = str(data.get("Nomor Ulok", "")).replace("-", "").replace(" ", "").strip().upper()
+            incoming_lingkup = str(data.get("Lingkup Pekerjaan", "")).strip().lower()
 
             is_duplicate = google_provider.check_spk_exists(incoming_ulok, incoming_lingkup)
 
@@ -2727,29 +2727,6 @@ def submit_spk():
                         "sudah pernah diajukan dan sedang diproses (Menunggu BM) atau sudah disetujui."
                     )
                 }), 409
-
-            # Ambil semua data SPK yang ada
-            spk_sheet = google_provider.sheet.worksheet(config.SPK_DATA_SHEET_NAME)
-            all_records = spk_sheet.get_all_records()
-
-            for record in all_records:
-                existing_ulok = str(record.get("Nomor Ulok", "")).replace("-", "").replace(" ", "").strip().upper()
-                
-                rec_lingkup_raw = record.get("Lingkup Pekerjaan", record.get("Lingkup_Pekerjaan", ""))
-                existing_lingkup = str(rec_lingkup_raw).strip().lower()
-                
-                status = str(record.get("Status", "")).strip()
-
-                if incoming_ulok == existing_ulok and incoming_lingkup == existing_lingkup:
-                    if status != config.STATUS.SPK_REJECTED:
-                        log_app("submit_spk", "existing non-rejected", ulok=incoming_ulok, lingkup=incoming_lingkup)
-                        return jsonify({
-                            "status": "error",
-                            "message": (
-                                f"SPK untuk Ulok {data.get('Nomor Ulok')} dengan lingkup {data.get('Lingkup Pekerjaan')} "
-                                "sudah pernah diajukan dan sedang diproses atau sudah disetujui."
-                            )
-                        }), 409
 
         WIB = timezone(timedelta(hours=7))
         now = datetime.datetime.now(WIB)

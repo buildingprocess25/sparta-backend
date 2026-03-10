@@ -258,8 +258,14 @@ class GoogleServiceProvider:
 
     def get_next_spk_sequence(self, cabang, year, month):
         try:
-            spk_sheet = self.sheet.worksheet(config.SPK_DATA_SHEET_NAME)
-            all_records = spk_sheet.get_all_records()
+            spk_sheet = self._with_google_retry(
+                lambda: self.sheet.worksheet(config.SPK_DATA_SHEET_NAME),
+                op_name="spk_sequence_open_worksheet",
+            )
+            all_records = self._with_google_retry(
+                lambda: spk_sheet.get_all_records(),
+                op_name="spk_sequence_get_all_records",
+            )
             count = 0
             for record in all_records:
                 if str(record.get('Cabang', '')).strip().lower() == cabang.lower():
@@ -2937,8 +2943,14 @@ class GoogleServiceProvider:
             target_ulok = self._normalize_ulok(nomor_ulok_to_check)
             target_lingkup = self._normalize_lingkup(lingkup_pekerjaan_to_check)
 
-            spk_sheet = self.sheet.worksheet(config.SPK_DATA_SHEET_NAME)
-            all_records = spk_sheet.get_all_records()
+            spk_sheet = self._with_google_retry(
+                lambda: self.sheet.worksheet(config.SPK_DATA_SHEET_NAME),
+                op_name="check_spk_open_worksheet",
+            )
+            all_records = self._with_google_retry(
+                lambda: spk_sheet.get_all_records(),
+                op_name="check_spk_get_all_records",
+            )
 
             for record in all_records:
                 status = str(record.get("Status", "")).strip()
@@ -2958,6 +2970,8 @@ class GoogleServiceProvider:
             
             return False
         except Exception as e:
+            if self._extract_status_code(e) == 429:
+                raise
             print(f"Error checking for existing SPK ulok: {e}")
             return False
     
