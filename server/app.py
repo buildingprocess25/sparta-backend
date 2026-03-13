@@ -1540,8 +1540,114 @@ def handle_rab_2_approval():
                 row_data[config.COLUMN_NAMES.LINK_PDF_NONSBO] = link_pdf_nonsbo
                 row_data[config.COLUMN_NAMES.LINK_PDF_REKAP] = link_pdf_rekap
 
-                # 3. Cari Email Manager
                 cabang = row_data.get('Cabang')
+
+                # Khusus Cabang BATAM: approval berhenti di koordinator (manager dilewati)
+                if _is_batam_branch(cabang):
+                    if not google_provider.update_cell_by_sheet(worksheet, row, config.COLUMN_NAMES.STATUS, config.STATUS.APPROVED):
+                        raise RuntimeError(f"Gagal update kolom {config.COLUMN_NAMES.STATUS} pada row {row} (RAB 2)")
+
+                    row_data[config.COLUMN_NAMES.STATUS] = config.STATUS.APPROVED
+                    google_provider.copy_to_approved_sheet_kedua(row_data)
+
+                    email_pembuat = row_data.get(config.COLUMN_NAMES.EMAIL_PEMBUAT)
+                    support_emails = [email_pembuat] if email_pembuat else []
+                    coordinator_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.KOORDINATOR)
+                    final_approver_email = approver
+
+                    email_attachments = [
+                        (pdf_nonsbo_filename, pdf_nonsbo_bytes, 'application/pdf'),
+                        (pdf_recap_filename, pdf_recap_bytes, 'application/pdf')
+                    ]
+
+                    m_name = None
+                    link_pdf_manual = row_data.get(config.COLUMN_NAMES.LINK_PDF_IL, '')
+                    if link_pdf_manual and len(link_pdf_manual) > 5:
+                        manual_name, manual_bytes, manual_type = google_provider.download_file_from_link(link_pdf_manual)
+                        if manual_name and manual_bytes:
+                            email_attachments.append((manual_name, manual_bytes, manual_type))
+                            m_name = manual_name
+
+                    nama_toko = row_data.get('Nama_Toko', row_data.get('nama_toko', 'N/A'))
+                    lingkup_pekerjaan = row_data.get('Lingkup_Pekerjaan', row_data.get('lingkup_pekerjaan', 'N/A'))
+                    subject = f"[FINAL - DISETUJUI] Pengajuan Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}"
+
+                    base_body = (
+                        f"<p>Pengajuan Instruksi Lapangan untuk proyek <b>{nama_toko}</b> di cabang <b>{cabang}</b> "
+                        f"telah disetujui sepenuhnya.</p>"
+                        f"<p>Dokumen Instruksi Lapangan final telah dilampirkan:</p>"
+                        f"<ul>"
+                        f"<li><b>{pdf_nonsbo_filename}</b>: Hanya berisi item pekerjaan di luar SBO.</li>"
+                        f"<li><b>{pdf_recap_filename}</b>: Rekapitulasi total biaya.</li>"
+                    )
+
+                    if m_name:
+                        base_body += f"<li><b>{m_name}</b>: Rekapitulasi lampiran tambahan / Instruksi Lapangan.</li>"
+
+                    base_body += (
+                        f"</ul>"
+                        f"<p>Link Google Drive:</p>"
+                        f"<ul>"
+                        f"<li><a href='{link_pdf_nonsbo}'>Link PDF Non-SBO (Final)</a></li>"
+                        f"<li><a href='{link_pdf_rekap}'>Link PDF Rekapitulasi (Final)</a></li>"
+                    )
+
+                    if link_pdf_manual:
+                        base_body += f"<li><a href='{link_pdf_manual}'>Link Lampiran Tambahan / Instruksi Lapangan</a></li>"
+
+                    base_body += "</ul>"
+
+                    if support_emails:
+                        support_body = (
+                            base_body +
+                            f"<hr>"
+                            f"<p><b>TINDAKAN DIPERLUKAN:</b></p>"
+                            f"<p>Silakan Opname pekerjaan instruksi lapangan melalui link berikut:</p>"
+                            f"<p><a href='https://sparta-alfamart.vercel.app' "
+                            f"target='_blank' style='background-color:#28a745; color:white; padding:10px 15px; text-decoration:none; border-radius:5px;'>INPUT OPNAME IL</a></p>"
+                        )
+                        _send_email_safe(
+                            context=f"rab_2_approval_batam_support_row_{row}",
+                            to=support_emails,
+                            subject=subject,
+                            html_body=support_body,
+                            attachments=email_attachments
+                        )
+
+                    if coordinator_emails:
+                        _send_email_safe(
+                            context=f"rab_2_approval_batam_coordinator_row_{row}",
+                            to=coordinator_emails,
+                            subject=subject,
+                            html_body=base_body,
+                            attachments=email_attachments
+                        )
+
+                    if final_approver_email:
+                        _send_email_safe(
+                            context=f"rab_2_approval_batam_approver_row_{row}",
+                            to=[final_approver_email],
+                            subject=subject,
+                            html_body=base_body,
+                            attachments=email_attachments
+                        )
+
+                    log_app(
+                        "handle_rab_2_approval",
+                        "approved by coordinator (batam shortcut)",
+                        row=row,
+                        approver=approver,
+                        status=config.STATUS.APPROVED,
+                    )
+
+                    return render_template(
+                        'response_page.html',
+                        title='Persetujuan Berhasil',
+                        message='Terima kasih. Persetujuan koordinator untuk cabang BATAM telah dicatat dan langsung disetujui.',
+                        logo_url=logo_url,
+                    )
+
+                # 3. Cari Email Manager
                 manager_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.MANAGER)
                 
                 if manager_emails:

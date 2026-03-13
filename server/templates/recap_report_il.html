@@ -23,6 +23,16 @@
             font-size: 10px;
         }
 
+        .watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 240px;
+            transform: translate(-50%, -50%);
+            opacity: 0.10;
+            z-index: -1;
+        }
+
         .container {
             width: 100%;
         }
@@ -143,6 +153,10 @@
             vertical-align: top;
         }
 
+        .signatures.batam-two-cols .signature-box {
+            width: 50%;
+        }
+
         .signature-box .title {
             font-size: 11px;
             margin-bottom: 5px;
@@ -179,6 +193,9 @@
 </head>
 
 <body>
+    {% if watermark_logo_path %}
+    <img src="{{ watermark_logo_path }}" class="watermark" alt="watermark" />
+    {% endif %}
     <div class="container">
 
         <div class="header-title">
@@ -257,7 +274,7 @@
                     <td class="total-amount-cell">{{ pembulatan_formatted }}</td>
                 </tr>
                 <tr>
-                    <td>PPN 11% (Rp)</td>
+                    <td>{{ 'PPN BATAM (Rp)' if is_batam_branch else 'PPN 11% (Rp)' }}</td>
                     <td class="total-amount-cell">{{ ppn_formatted }}</td>
                 </tr>
                 <tr>
@@ -268,7 +285,7 @@
         </table>
         <div style="clear: both;"></div>
 
-        <div class="signatures">
+        <div class="signatures{% if is_batam_branch %} batam-two-cols{% endif %}">
             <div class="signature-box">
                 <p class="title">Dibuat</p>
                 <div class="signature-content">
@@ -278,13 +295,14 @@
                 <p class="jabatan">{{ JABATAN.SUPPORT }}</p>
             </div>
             <div class="signature-box">
-                <p class="title">Mengetahui</p>
+                <p class="title">{{ 'Menyetujui' if is_batam_branch else 'Mengetahui' }}</p>
                 <div class="signature-content">
                     {{ coordinator_approval_details | safe }}
                     <div class="signature-line"></div>
                 </div>
                 <p class="jabatan">{{ JABATAN.KOORDINATOR }}</p>
             </div>
+            {% if not is_batam_branch %}
             <div class="signature-box">
                 <p class="title">Menyetujui</p>
                 <div class="signature-content">
@@ -293,6 +311,7 @@
                 </div>
                 <p class="jabatan">{{ JABATAN.MANAGER }}</p>
             </div>
+            {% endif %}
         </div>
     </div>
 </body>
