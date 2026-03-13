@@ -85,6 +85,15 @@ def _is_batam_branch(cabang):
     return _normalize_text(cabang).upper() == "BATAM"
 
 
+def _send_email_safe(context, **send_kwargs):
+    try:
+        google_provider.send_email(**send_kwargs)
+        return True
+    except Exception as email_err:
+        log_app("email", "send failed", context=context, error=str(email_err))
+        return False
+
+
 
 # --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---
 GAS_URLS = {
@@ -1266,7 +1275,8 @@ def handle_rab_approval():
                         f"target='_blank'>UPLOAD REKAP RAB TERMATERAI & SPH</a></p>"
                     )
 
-                    google_provider.send_email(
+                    _send_email_safe(
+                        context=f"rab_approval_batam_kontraktor_row_{row}",
                         to=kontraktor_emails,
                         subject=subject,
                         html_body=kontraktor_body,
@@ -1274,7 +1284,8 @@ def handle_rab_approval():
                     )
 
                 if coordinator_emails:
-                    google_provider.send_email(
+                    _send_email_safe(
+                        context=f"rab_approval_batam_coordinator_row_{row}",
                         to=coordinator_emails,
                         subject=subject,
                         html_body=base_body,
@@ -1282,7 +1293,8 @@ def handle_rab_approval():
                     )
 
                 if final_approver_email:
-                    google_provider.send_email(
+                    _send_email_safe(
+                        context=f"rab_approval_batam_approver_row_{row}",
                         to=[final_approver_email],
                         subject=subject,
                         html_body=base_body,
@@ -1313,10 +1325,11 @@ def handle_rab_approval():
                     approval_url_manager = f"{base_url}/api/handle_rab_approval?action=approve&row={row}&level=manager&approver={manager_email}"
                     rejection_url_manager = f"{base_url}/api/reject_form/rab?row={row}&level=manager&approver={manager_email}"
                     email_html_manager = render_template('email_template.html', doc_type="RAB", level='Manajer', form_data=row_data, approval_url=approval_url_manager, rejection_url=rejection_url_manager, additional_info=f"Telah disetujui oleh Koordinator: {approver}")
-                    google_provider.send_email(
-                        manager_email,
-                        f"[TAHAP 2: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
-                        email_html_manager,
+                    _send_email_safe(
+                        context=f"rab_approval_notify_manager_row_{row}_{manager_email}",
+                        to=manager_email,
+                        subject=f"[TAHAP 2: PERLU PERSETUJUAN] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                        html_body=email_html_manager,
                         attachments=[(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
                     )
             return render_template('response_page.html', title='Persetujuan Diteruskan', message='Terima kasih. Persetujuan Anda telah dicatat.', logo_url=logo_url)
@@ -1406,7 +1419,8 @@ def handle_rab_approval():
                     f"target='_blank'>UPLOAD REKAP RAB TERMATERAI & SPH</a></p>"
                 )
 
-                google_provider.send_email(
+                _send_email_safe(
+                    context=f"rab_approval_final_kontraktor_row_{row}",
                     to=kontraktor_emails,
                     subject=subject,
                     html_body=kontraktor_body,
@@ -1415,7 +1429,8 @@ def handle_rab_approval():
 
             # 2) KOORDINATOR → hanya body utama
             if coordinator_emails:
-                google_provider.send_email(
+                _send_email_safe(
+                    context=f"rab_approval_final_coordinator_row_{row}",
                     to=coordinator_emails,
                     subject=subject,
                     html_body=base_body,
@@ -1424,7 +1439,8 @@ def handle_rab_approval():
 
             # 3) MANAGER → hanya body utama
             if manager_email:
-                google_provider.send_email(
+                _send_email_safe(
+                    context=f"rab_approval_final_manager_row_{row}",
                     to=[manager_email],
                     subject=subject,
                     html_body=base_body,

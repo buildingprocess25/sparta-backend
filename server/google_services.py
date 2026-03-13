@@ -1,6 +1,7 @@
 import os.path
 import io
 import re
+import socket
 import gspread
 import json
 import time
@@ -37,12 +38,16 @@ class GoogleServiceProvider:
                 return operation()
             except Exception as err:
                 status_code = self._extract_status_code(err)
-                if status_code != 429 or attempt >= max_retries:
+                is_timeout = isinstance(err, (TimeoutError, socket.timeout)) or "timed out" in str(err).lower()
+                is_retryable_status = status_code in {429, 500, 502, 503, 504}
+
+                if (not is_timeout and not is_retryable_status) or attempt >= max_retries:
                     raise
 
                 delay = base_delay * (2 ** attempt)
+                retry_reason = f"http_{status_code}" if is_retryable_status else "timeout"
                 print(
-                    f"⚠️ Quota 429 saat {op_name}. Retry {attempt + 1}/{max_retries} dalam {delay:.1f}s"
+                    f"⚠️ Retryable error ({retry_reason}) saat {op_name}. Retry {attempt + 1}/{max_retries} dalam {delay:.1f}s"
                 )
                 time.sleep(delay)
 
@@ -2343,9 +2348,14 @@ class GoogleServiceProvider:
                     message.attach(part)
 
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-            self.gmail_service.users().messages().send(
-                userId='me', body={'raw': raw_message}
-            ).execute()
+            self._with_google_retry(
+                lambda: self.gmail_service.users().messages().send(
+                    userId='me', body={'raw': raw_message}
+                ).execute(num_retries=3),
+                op_name="gmail_send_email",
+                max_retries=3,
+                base_delay=2.0,
+            )
             print(f"Email sent successfully to {message['to']}")
         except Exception as e:
             print(f"An error occurred while sending email: {e}")
