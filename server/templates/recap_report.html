@@ -302,7 +302,7 @@
         </table>
         <div style="clear: both;"></div>
 
-        <div class="signatures{% if is_batam_branch %} batam-two-cols{% endif %}">
+        <div class="signatures{% if is_batam_branch or is_manager_only_branch %} batam-two-cols{% endif %}">
             <div class="signature-box">
                 <p class="title">Dibuat</p>
                 <div class="signature-content">
@@ -312,14 +312,14 @@
                 <p class="jabatan">{{ JABATAN.KONTRAKTOR }}</p>
             </div>
             <div class="signature-box">
-                <p class="title">{{ 'Menyetujui' if is_batam_branch else 'Mengetahui' }}</p>
+                <p class="title">{{ 'Menyetujui' if (is_batam_branch or is_manager_only_branch) else 'Mengetahui' }}</p>
                 <div class="signature-content">
-                    {{ coordinator_approval_details | safe }}
+                    {{ manager_approval_details | safe if is_manager_only_branch else coordinator_approval_details | safe }}
                     <div class="signature-line"></div>
                 </div>
-                <p class="jabatan">{{ JABATAN.KOORDINATOR }}</p>
+                <p class="jabatan">{{ JABATAN.MANAGER if is_manager_only_branch else JABATAN.KOORDINATOR }}</p>
             </div>
-            {% if not is_batam_branch %}
+            {% if not is_batam_branch and not is_manager_only_branch %}
             <div class="signature-box">
                 <p class="title">Menyetujui</p>
                 <div class="signature-content">

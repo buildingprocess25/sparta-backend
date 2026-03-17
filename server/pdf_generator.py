@@ -82,6 +82,12 @@ def is_cabang_batam(cabang):
         return False
     return str(cabang).strip().upper() == "BATAM"
 
+
+def is_cabang_manado(cabang):
+    if not cabang:
+        return False
+    return str(cabang).strip().upper() == "MANADO"
+
 def calculate_ppn(pembulatan, cabang):
     if is_cabang_batam(cabang):
         return 0
@@ -253,6 +259,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
     
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
     is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
+    is_manager_only_branch = is_cabang_manado(form_cabang)
 
     # Pembulatan turun ke kelipatan 10.000
     pembulatan = math.floor(grand_total / 10000) * 10000
@@ -342,7 +349,8 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
         format_rupiah=format_rupiah,
         tanggal_pengajuan=tanggal_pengajuan_str,
         nama_pt=nama_pt_found,
-        is_batam_branch=is_batam_branch
+        is_batam_branch=is_batam_branch,
+        is_manager_only_branch=is_manager_only_branch
     )
 
     return HTML(string=html_string).write_pdf()
@@ -426,6 +434,7 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
     
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
     is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
+    is_manager_only_branch = is_cabang_manado(form_cabang)
 
     # Pembulatan turun ke kelipatan 10.000
     pembulatan = math.floor(grand_total / 10000) * 10000
@@ -515,7 +524,8 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
         format_rupiah=format_rupiah,
         tanggal_pengajuan=tanggal_pengajuan_str,
         nama_pt=nama_pt_found,
-        is_batam_branch=is_batam_branch
+        is_batam_branch=is_batam_branch,
+        is_manager_only_branch=is_manager_only_branch
     )
 
     return HTML(string=html_string).write_pdf()
@@ -628,6 +638,7 @@ def create_recap_pdf(google_provider, form_data):
 
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
     is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
+    is_manager_only_branch = is_cabang_manado(form_cabang)
 
     # PPN 11% (kecuali Cabang BATAM)
     ppn = calculate_ppn(pembulatan, form_cabang)
@@ -713,7 +724,8 @@ def create_recap_pdf(google_provider, form_data):
         ppn_formatted=format_rupiah(ppn),
         final_total_formatted=format_rupiah(final_grand_total),
         nama_pt=nama_pt_found,
-        is_batam_branch=is_batam_branch
+        is_batam_branch=is_batam_branch,
+        is_manager_only_branch=is_manager_only_branch
     )
     
     return HTML(string=html_string).write_pdf()
@@ -799,6 +811,7 @@ def create_recap_pdf_il(google_provider, form_data):
 
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
     is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
+    is_manager_only_branch = is_cabang_manado(form_cabang)
 
     # PPN 11% (kecuali Cabang BATAM)
     ppn = calculate_ppn(pembulatan, form_cabang)
@@ -884,7 +897,8 @@ def create_recap_pdf_il(google_provider, form_data):
         ppn_formatted=format_rupiah(ppn),
         final_total_formatted=format_rupiah(final_grand_total),
         nama_pt=nama_pt_found,
-        is_batam_branch=is_batam_branch
+        is_batam_branch=is_batam_branch,
+        is_manager_only_branch=is_manager_only_branch
     )
     
     return HTML(string=html_string).write_pdf()

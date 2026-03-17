@@ -85,6 +85,10 @@ def _is_batam_branch(cabang):
     return _normalize_text(cabang).upper() == "BATAM"
 
 
+def _is_manado_branch(cabang):
+    return _normalize_text(cabang).upper() == "MANADO"
+
+
 def _send_email_safe(context, **send_kwargs):
     try:
         google_provider.send_email(**send_kwargs)
@@ -558,7 +562,10 @@ def submit_rab():
 
         # Set status awal & timestamp
         WIB = timezone(timedelta(hours=7))
-        data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_COORDINATOR
+        cabang_value = data.get(config.COLUMN_NAMES.CABANG, data.get('Cabang', ''))
+        is_manado_branch = _is_manado_branch(cabang_value)
+        initial_status = config.STATUS.WAITING_FOR_MANAGER if is_manado_branch else config.STATUS.WAITING_FOR_COORDINATOR
+        data[config.COLUMN_NAMES.STATUS] = initial_status
         data[config.COLUMN_NAMES.TIMESTAMP] = datetime.datetime.now(WIB).isoformat()
 
 
@@ -680,9 +687,8 @@ def submit_rab():
         data[config.COLUMN_NAMES.LOKASI] = nomor_ulok_formatted
 
         # Insert summary awal saat submit RAB (tanpa lookup by ulok+lingkup)
-        cabang_value = data.get(config.COLUMN_NAMES.CABANG, data.get('Cabang', ''))
         google_provider.send_status_rab(
-            config.STATUS.WAITING_FOR_COORDINATOR,
+            initial_status,
             nomor_ulok_formatted,
             data.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, ''),
             cabang_value,
@@ -709,7 +715,39 @@ def submit_rab():
             final_row_index = new_row_index
             log_app("submit_rab", "new row added", row=final_row_index)
 
-        # --- 7) SKIP KIRIM EMAIL KOORDINATOR ---
+        # --- 7) KHUSUS MANADO: KIRIM EMAIL APPROVAL LANGSUNG KE MANAJER ---
+        if is_manado_branch:
+            manager_emails = google_provider.get_emails_by_jabatan(cabang_value, config.JABATAN.MANAGER)
+            if not manager_emails:
+                raise Exception(f"Tidak ada email Manager untuk cabang '{cabang_value}'.")
+
+            base_url = "https://sparta-backend-5hdj.onrender.com"
+            attachments_list = [(pdf_merged_filename, pdf_merged_bytes, 'application/pdf')]
+
+            for manager_email in manager_emails:
+                approval_url_manager = f"{base_url}/api/handle_rab_approval?action=approve&row={final_row_index}&level=manager&approver={manager_email}"
+                rejection_url_manager = f"{base_url}/api/reject_form/rab?row={final_row_index}&level=manager&approver={manager_email}"
+
+                email_html_manager = render_template(
+                    'email_template.html',
+                    doc_type="RAB",
+                    level='Manajer',
+                    form_data=data,
+                    approval_url=approval_url_manager,
+                    rejection_url=rejection_url_manager,
+                    additional_info="Cabang MANADO: pengajuan ini langsung meminta persetujuan Manajer."
+                )
+
+                _send_email_safe(
+                    context=f"submit_rab_manado_notify_manager_row_{final_row_index}_{manager_email}",
+                    to=manager_email,
+                    subject=f"[TAHAP 1: PERLU PERSETUJUAN MANAJER] RAB Proyek {nama_toko}: {jenis_toko} - {lingkup_pekerjaan}",
+                    html_body=email_html_manager,
+                    attachments=attachments_list
+                )
+
+            log_app("submit_rab", "manager notified (manado)", row=final_row_index, cabang=cabang_value, email_count=len(manager_emails))
+
         return jsonify({
             "status": "success",
             "message": "Data successfully submitted/updated."
@@ -801,7 +839,10 @@ def submit_rab_kedua():
 
         # Set status awal & timestamp
         WIB = timezone(timedelta(hours=7))
-        data[config.COLUMN_NAMES.STATUS] = config.STATUS.WAITING_FOR_COORDINATOR
+        cabang_value = data.get(config.COLUMN_NAMES.CABANG, data.get('Cabang', ''))
+        is_manado_branch = _is_manado_branch(cabang_value)
+        initial_status = config.STATUS.WAITING_FOR_MANAGER if is_manado_branch else config.STATUS.WAITING_FOR_COORDINATOR
+        data[config.COLUMN_NAMES.STATUS] = initial_status
         data[config.COLUMN_NAMES.TIMESTAMP] = datetime.datetime.now(WIB).isoformat()
 
         # --- HITUNG TOTAL ---
@@ -919,12 +960,14 @@ def submit_rab_kedua():
             if existing_row_index:
                 log_app("submit_rab_kedua", "reuse rejected row", row=existing_row_index)
                 previous_status = worksheet.cell(existing_row_index, col_status).value if col_status else ""
-                if previous_status == config.STATUS.REJECTED_BY_COORDINATOR:
+                if is_manado_branch:
+                    new_status_for_existing = config.STATUS.WAITING_FOR_MANAGER
+                elif previous_status == config.STATUS.REJECTED_BY_COORDINATOR:
                     new_status_for_existing = config.STATUS.WAITING_FOR_COORDINATOR
                 elif previous_status == config.STATUS.REJECTED_BY_MANAGER:
                     new_status_for_existing = config.STATUS.WAITING_FOR_MANAGER
                 else:
-                    new_status_for_existing = config.STATUS.WAITING_FOR_COORDINATOR
+                    new_status_for_existing = initial_status
 
                 if col_status:
                     worksheet.update_cell(existing_row_index, col_status, new_status_for_existing)
@@ -978,9 +1021,12 @@ def submit_rab_kedua():
         if not cabang:
             raise Exception("Field 'Cabang' is empty.")
 
-        coordinator_emails = google_provider.get_emails_by_jabatan(cabang, config.JABATAN.KOORDINATOR)
-        if not coordinator_emails:
-            raise Exception(f"Tidak ada email Koordinator untuk cabang '{cabang}'.")
+        target_level = 'manager' if is_manado_branch else 'coordinator'
+        approver_role = config.JABATAN.MANAGER if is_manado_branch else config.JABATAN.KOORDINATOR
+        approver_emails = google_provider.get_emails_by_jabatan(cabang, approver_role)
+        if not approver_emails:
+            role_name = 'Manager' if is_manado_branch else 'Koordinator'
+            raise Exception(f"Tidak ada email {role_name} untuk cabang '{cabang}'.")
 
         base_url = "https://sparta-backend-5hdj.onrender.com"
 
@@ -992,27 +1038,31 @@ def submit_rab_kedua():
         if file_pdf_IL_upload and link_pdf_IL:
              attachments_list.append((manual_filename, manual_file_bytes, file_pdf_IL_upload.content_type))
 
-        for coordinator_email in coordinator_emails:
-            approval_url = f"{base_url}/api/handle_rab_2_approval?action=approve&row={new_row_index}&level=coordinator&approver={coordinator_email}"
-            rejection_url = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={new_row_index}&level=coordinator&approver={coordinator_email}"
+        for approver_email in approver_emails:
+            approval_url = f"{base_url}/api/handle_rab_2_approval?action=approve&row={new_row_index}&level={target_level}&approver={approver_email}"
+            rejection_url = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={new_row_index}&level={target_level}&approver={approver_email}"
 
             email_html = render_template(
                 'email_template.html',
                 doc_type="RAB",
-                level='Koordinator',
+                level='Manajer' if is_manado_branch else 'Koordinator',
                 form_data=data,
                 approval_url=approval_url,
                 rejection_url=rejection_url
             )
 
             google_provider.send_email(
-                to=coordinator_email,
-                subject=f"[TAHAP 1: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}",
+                to=approver_email,
+                subject=(
+                    f"[TAHAP 1: PERLU PERSETUJUAN MANAJER] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}"
+                    if is_manado_branch
+                    else f"[TAHAP 1: PERLU PERSETUJUAN] Instruksi Lapangan Proyek {nama_toko} - {lingkup_pekerjaan}"
+                ),
                 html_body=email_html,
                 attachments=attachments_list
             )
 
-        log_app("submit_rab_kedua", "success", row=new_row_index, cabang=cabang, email_count=len(coordinator_emails))
+        log_app("submit_rab_kedua", "success", row=new_row_index, cabang=cabang, email_count=len(approver_emails), approver_level=target_level)
 
         return jsonify({
             "status": "success",
