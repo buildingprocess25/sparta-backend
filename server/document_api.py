@@ -11,6 +11,7 @@ import config
 from google_services import GoogleServiceProvider
 from gspread.exceptions import APIError
 from googleapiclient.errors import HttpError
+from werkzeug.exceptions import BadRequest
 
 # Inisialisasi Blueprint
 doc_bp = Blueprint('document_api', __name__)
@@ -186,8 +187,25 @@ def list_documents():
 @doc_bp.route('/api/doc/save', methods=['POST'])
 def save_document_base64():
     try:
+        try:
+            payload = request.get_json(silent=False)
+        except BadRequest:
+            raw_preview = request.get_data(cache=False, as_text=True)[:300]
+            log_doc(
+                "save_document_base64",
+                "invalid json payload",
+                content_type=request.content_type,
+                body_preview=raw_preview.replace("\n", "\\n"),
+            )
+            return jsonify({
+                "detail": "Body JSON tidak valid. Pastikan format JSON benar dan karakter kutip/newline di-escape.",
+            }), 400
+
+        if not isinstance(payload, dict):
+            log_doc("save_document_base64", "invalid payload type", payload_type=type(payload).__name__)
+            return jsonify({"detail": "Body request harus berupa objek JSON."}), 400
+
         provider = get_google_provider()
-        payload = request.get_json()
         
         kode_toko = payload.get("kode_toko")
         nama_toko = payload.get("nama_toko")
