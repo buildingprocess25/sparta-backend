@@ -183,7 +183,7 @@ def generate_materai_email_body(data, role='manager'):
         <p style="margin-top: 20px;">
             Untuk mengisi form selanjutnya (SPK), silakan akses tautan berikut:
             <br/>
-            📌 <a href="https://building-alfamart.vercel.app/login_spk.html" target="_blank">Isi Form SPK</a>
+            📌 <a href="https://sparta-alfamart.vercel.app/" target="_blank">Isi Form SPK</a>
         </p>
         """
 
@@ -191,7 +191,7 @@ def generate_materai_email_body(data, role='manager'):
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
       <p>Semangat Pagi,</p>
       <p>Bapak/Ibu <strong>{sapaan}</strong>,</p>
-      <p>Email ini merupakan notifikasi bahwa dokumen materai baru telah diunggah dengan rincian:</p>
+      <p>Email ini merupakan notifikasi bahwa dokumen SPH baru telah diunggah dengan rincian:</p>
       <ul>
         <li><strong>Tanggal Upload:</strong> {data.get('tanggal_upload', 'N/A')}</li>
         <li><strong>Cabang:</strong> {data.get('cabang', 'N/A')}</li>
@@ -204,7 +204,7 @@ def generate_materai_email_body(data, role='manager'):
       <p>Terima kasih.</p>
     </div>
     """
-    subject = f"Dokumen Final RAB Penawaran Termaterai - {data.get('ulok')}"
+    subject = f"Dokumen SPH - {data.get('ulok')}"
     return subject, html_body
 
 def format_ulok(nomor_ulok_raw: str) -> str:
@@ -1324,9 +1324,9 @@ def handle_rab_approval():
                 if kontraktor_emails:
                     kontraktor_body = (
                         base_body +
-                        f"<p>Silakan upload Rekapitulasi RAB Termaterai & SPH melalui link berikut:</p>"
-                        f"<p><a href='https://materai-rab-pi.vercel.app/login' "
-                        f"target='_blank'>UPLOAD REKAP RAB TERMATERAI & SPH</a></p>"
+                        f"<p>Silakan upload Rekapitulasi RAB & SPH melalui link berikut:</p>"
+                        f"<p><a href='https://sparta-alfamart.vercel.app/login' "
+                        f"target='_blank'>UPLOAD REKAP RAB & SPH</a></p>"
                     )
 
                     _send_email_safe(
@@ -1468,9 +1468,9 @@ def handle_rab_approval():
             if kontraktor_emails:
                 kontraktor_body = (
                     base_body +
-                    f"<p>Silakan upload Rekapitulasi RAB Termaterai & SPH melalui link berikut:</p>"
-                    f"<p><a href='https://materai-rab-pi.vercel.app/login' "
-                    f"target='_blank'>UPLOAD REKAP RAB TERMATERAI & SPH</a></p>"
+                    f"<p>Silakan upload Rekapitulasi RAB & SPH melalui link berikut:</p>"
+                    f"<p><a href='https://sparta-alfamart.vercel.app/' "
+                    f"target='_blank'>UPLOAD REKAP RAB & SPH</a></p>"
                 )
 
                 _send_email_safe(
