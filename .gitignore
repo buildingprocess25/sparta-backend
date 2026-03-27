@@ -18,9 +18,8 @@ token.json
 token_doc.json
 *.env
 .env*
-
+sparta-be/
 email-sistem-lain/
 sparta-api/
 svdokumen/
-sparta-be/
 venv/
