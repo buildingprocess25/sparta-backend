@@ -83,13 +83,19 @@ def is_cabang_batam(cabang):
     return str(cabang).strip().upper() == "BATAM"
 
 
+def is_cabang_no_ppn(cabang):
+    if not cabang:
+        return False
+    return str(cabang).strip().upper() in {"BATAM", "BINTAN"}
+
+
 def is_cabang_manado(cabang):
     if not cabang:
         return False
     return str(cabang).strip().upper() == "MANADO"
 
 def calculate_ppn(pembulatan, cabang):
-    if is_cabang_batam(cabang):
+    if is_cabang_no_ppn(cabang):
         return 0
     return pembulatan * 0.11
 

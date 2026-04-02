@@ -85,6 +85,10 @@ def _is_batam_branch(cabang):
     return _normalize_text(cabang).upper() == "BATAM"
 
 
+def _is_no_ppn_branch(cabang):
+    return _normalize_text(cabang).upper() in {"BATAM", "BINTAN"}
+
+
 def _is_manado_branch(cabang):
     return _normalize_text(cabang).upper() == "MANADO"
 
@@ -604,10 +608,10 @@ def submit_rab():
 
         # --- 3) HITUNG GRAND TOTAL FINAL (UNTUK SPK) ---
         #   - dibulatkan ke bawah kelipatan 10.000
-        #   - PPN 0% khusus cabang BATAM, selain itu 11%
+        #   - PPN 0% khusus cabang BATAM/BINTAN, selain itu 11%
         pembulatan = (total_semua_item // 10000) * 10000  # kelipatan 10.000
         cabang_for_tax = data.get(config.COLUMN_NAMES.CABANG, data.get('Cabang', ''))
-        ppn_rate = 0.0 if _is_batam_branch(cabang_for_tax) else 0.11
+        ppn_rate = 0.0 if _is_no_ppn_branch(cabang_for_tax) else 0.11
         ppn = pembulatan * ppn_rate
         final_grand_total = pembulatan + ppn
 
@@ -864,10 +868,10 @@ def submit_rab_kedua():
         data[config.COLUMN_NAMES.GRAND_TOTAL_NONSBO] = total_non_sbo
         data[config.COLUMN_NAMES.GRAND_TOTAL] = total_semua_item
 
-        # Pembulatan & PPN (BATAM = 0%, selain BATAM = 11%)
+        # Pembulatan & PPN (BATAM/BINTAN = 0%, selain itu = 11%)
         pembulatan = (total_semua_item // 10000) * 10000
         cabang_for_tax = data.get(config.COLUMN_NAMES.CABANG, data.get('Cabang', ''))
-        ppn_rate = 0.0 if _is_batam_branch(cabang_for_tax) else 0.11
+        ppn_rate = 0.0 if _is_no_ppn_branch(cabang_for_tax) else 0.11
         ppn = pembulatan * ppn_rate
         final_grand_total = pembulatan + ppn
         data[config.COLUMN_NAMES.GRAND_TOTAL_FINAL] = final_grand_total
