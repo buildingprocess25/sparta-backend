@@ -83,6 +83,31 @@ class GoogleServiceProvider:
                 return cached_entry.get("records", [])
             raise
 
+    def _get_sheet_records_cached(self, worksheet_name, cache_key=None, ttl_seconds=30, force_refresh=False):
+        """Read worksheet records with cache to reduce repeated read requests on hot paths."""
+        key = cache_key or f"records::{worksheet_name}"
+        now = time.time()
+
+        cached_entry = getattr(self, "_record_cache", {}).get(key)
+        if (
+            not force_refresh
+            and cached_entry
+            and (now - cached_entry.get("timestamp", 0)) < ttl_seconds
+        ):
+            return cached_entry.get("records", [])
+
+        worksheet = self._with_google_retry(
+            lambda: self.sheet.worksheet(worksheet_name),
+            op_name=f"{worksheet_name}_open_worksheet",
+        )
+        records = self._with_google_retry(
+            lambda: worksheet.get_all_records(),
+            op_name=f"{worksheet_name}_get_all_records",
+        )
+
+        self._record_cache[key] = {"timestamp": now, "records": records}
+        return records
+
     def __init__(self):
         self._record_cache = {}
 
@@ -2531,8 +2556,7 @@ class GoogleServiceProvider:
         try:
             normalized_branch = " ".join(str(branch_name or "").split()).upper()
             normalized_jabatan = " ".join(str(jabatan or "").split()).upper()
-            cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
-            for record in cabang_sheet.get_all_records():
+            for record in self._get_cabang_records():
                 record_branch = " ".join(str(record.get('CABANG', '')).split()).upper()
                 record_jabatan = " ".join(str(record.get('JABATAN', '')).split()).upper()
                 if normalized_branch and record_branch == normalized_branch and record_jabatan == normalized_jabatan:
@@ -2548,8 +2572,7 @@ class GoogleServiceProvider:
         try:
             normalized_branch = " ".join(str(branch_name or "").split()).upper()
             normalized_jabatan = " ".join(str(jabatan or "").split()).upper()
-            cabang_sheet = self.sheet.worksheet(config.CABANG_SHEET_NAME)
-            for record in cabang_sheet.get_all_records():
+            for record in self._get_cabang_records():
                 record_branch = " ".join(str(record.get('CABANG', '')).split()).upper()
                 record_jabatan = " ".join(str(record.get('JABATAN', '')).split()).upper()
                 if normalized_branch and record_branch == normalized_branch and record_jabatan == normalized_jabatan:
@@ -3139,8 +3162,11 @@ class GoogleServiceProvider:
         
     def get_rab_creator_by_ulok(self, nomor_ulok, lingkup_pekerjaan=None):
         try:
-            rab_sheet = self.sheet.worksheet(config.DATA_ENTRY_SHEET_NAME)
-            records = rab_sheet.get_all_records()
+            records = self._get_sheet_records_cached(
+                config.DATA_ENTRY_SHEET_NAME,
+                cache_key="data_entry_records",
+                ttl_seconds=30,
+            )
             
             # Mengubah "Z001-2512-D4D4-R" menjadi "Z0012512D4D4R" agar pencarian akurat
             target_ulok = str(nomor_ulok).replace("-", "").strip().upper()

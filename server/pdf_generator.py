@@ -25,8 +25,11 @@ def get_nama_lengkap_by_email(google_provider, email, cabang=None, expected_jaba
     fallback_name = ""
 
     try:
-        cabang_sheet = google_provider.sheet.worksheet(config.CABANG_SHEET_NAME)
-        records = cabang_sheet.get_all_records()
+        if hasattr(google_provider, "_get_cabang_records"):
+            records = google_provider._get_cabang_records()
+        else:
+            cabang_sheet = google_provider.sheet.worksheet(config.CABANG_SHEET_NAME)
+            records = cabang_sheet.get_all_records()
 
         for record in records:
             record_email = str(record.get('EMAIL_SAT', '')).strip().lower()
@@ -55,8 +58,11 @@ def get_nama_lengkap_by_email(google_provider, email, cabang=None, expected_jaba
 def get_nama_pt_by_cabang(google_provider, cabang):
     if not cabang: return ""
     try:
-        cabang_sheet = google_provider.sheet.worksheet(config.CABANG_SHEET_NAME)
-        records = cabang_sheet.get_all_records()
+        if hasattr(google_provider, "_get_cabang_records"):
+            records = google_provider._get_cabang_records()
+        else:
+            cabang_sheet = google_provider.sheet.worksheet(config.CABANG_SHEET_NAME)
+            records = cabang_sheet.get_all_records()
         for record in records:
             record_cabang = (
                 record.get('CABANG') or
