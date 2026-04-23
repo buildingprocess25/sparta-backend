@@ -2423,7 +2423,11 @@ class GoogleServiceProvider:
 
             for record in reversed(records):
                 lokasi = str(record.get(config.COLUMN_NAMES.LOKASI, "")).strip().upper()
-                lingkup = str(record.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, "")).strip().upper() # Ambil lingkup
+                lingkup_raw = record.get(
+                    config.COLUMN_NAMES.LINGKUP_PEKERJAAN,
+                    record.get('Lingkup Pekerjaan', '')
+                )
+                lingkup = str(lingkup_raw).strip().upper()
                 
                 # Buat kunci unik gabungan
                 unique_key = f"{lokasi}_{lingkup}"
