@@ -108,6 +108,33 @@ class GoogleServiceProvider:
         self._record_cache[key] = {"timestamp": now, "records": records}
         return records
 
+    def _records_from_values(self, all_values):
+        """Build records from raw sheet values while tolerating duplicate/blank headers."""
+        if not all_values:
+            return []
+
+        raw_headers = all_values[0]
+        headers = []
+        seen = {}
+        for idx, header in enumerate(raw_headers):
+            header_key = str(header).strip()
+            if not header_key:
+                header_key = f"__blank_{idx + 1}"
+            count = seen.get(header_key, 0)
+            if count:
+                header_key = f"{header_key}_{count + 1}"
+            seen[header_key] = count + 1
+            headers.append(header_key)
+
+        records = []
+        for row in all_values[1:]:
+            if not any(str(cell).strip() for cell in row):
+                continue
+            if len(row) < len(headers):
+                row = row + [""] * (len(headers) - len(row))
+            records.append(dict(zip(headers, row[:len(headers)])))
+        return records
+
     def __init__(self):
         self._record_cache = {}
 
@@ -2933,7 +2960,8 @@ class GoogleServiceProvider:
             worksheet = spreadsheet.worksheet(config.DATA_ENTRY_SHEET_NAME_RAB_2)
             
             # Ambil semua data
-            all_records = worksheet.get_all_records()
+            all_values = worksheet.get_all_values()
+            all_records = self._records_from_values(all_values)
             
             
             for record in all_records:
@@ -3316,7 +3344,8 @@ class GoogleServiceProvider:
             worksheet = spreadsheet.worksheet(config.DATA_ENTRY_SHEET_NAME_RAB_2)
             
             # Ambil semua data
-            all_records = worksheet.get_all_records()
+            all_values = worksheet.get_all_values()
+            all_records = self._records_from_values(all_values)
             
             # Normalisasi input (hapus spasi/dash untuk perbandingan yang akurat)
             target_ulok = str(nomor_ulok).replace("-", "").strip().upper()
