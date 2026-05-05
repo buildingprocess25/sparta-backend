@@ -271,6 +271,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
     
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
     is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
+    is_no_ppn_branch = is_cabang_no_ppn(form_cabang)
     is_manager_only_branch = is_cabang_manado(form_cabang)
 
     # Pembulatan turun ke kelipatan 10.000
@@ -362,6 +363,7 @@ def create_pdf_from_data(google_provider, form_data, exclude_sbo=False):
         tanggal_pengajuan=tanggal_pengajuan_str,
         nama_pt=nama_pt_found,
         is_batam_branch=is_batam_branch,
+        is_no_ppn_branch=is_no_ppn_branch,
         is_manager_only_branch=is_manager_only_branch
     )
 
@@ -446,6 +448,7 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
     
     form_cabang = form_data.get(config.COLUMN_NAMES.CABANG)
     is_batam_branch = str(form_cabang or "").strip().upper() == "BATAM"
+    is_no_ppn_branch = is_cabang_no_ppn(form_cabang)
     is_manager_only_branch = is_cabang_manado(form_cabang)
 
     # Pembulatan turun ke kelipatan 10.000
@@ -537,6 +540,7 @@ def create_pdf_from_data_il(google_provider, form_data, exclude_sbo=False):
         tanggal_pengajuan=tanggal_pengajuan_str,
         nama_pt=nama_pt_found,
         is_batam_branch=is_batam_branch,
+        is_no_ppn_branch=is_no_ppn_branch,
         is_manager_only_branch=is_manager_only_branch
     )
 

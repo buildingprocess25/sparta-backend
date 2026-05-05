@@ -274,7 +274,7 @@
                     <td class="total-amount-cell">{{ pembulatan_formatted }}</td>
                 </tr>
                 <tr>
-                    <td>{{ 'PPN BATAM (Rp)' if is_batam_branch else 'PPN 11% (Rp)' }}</td>
+                    <td>{{ 'PPN 0% (Rp)' if is_no_ppn_branch else 'PPN 11% (Rp)' }}</td>
                     <td class="total-amount-cell">{{ ppn_formatted }}</td>
                 </tr>
                 <tr>
