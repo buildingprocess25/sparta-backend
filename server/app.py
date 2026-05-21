@@ -7,6 +7,7 @@ import traceback
 import json
 import base64
 import io
+import uuid
 import requests # Pastikan sudah install: pip install requests
 from flask import Flask, request, jsonify, render_template, url_for
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ from data_api import data_bp
 from dokumentasi_api import dokumentasi_bp # <--- dokumentasi bangunan
 
 load_dotenv()
+SUBMISSION_ID_COLUMN = "Submission_ID"
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 app.config['MAX_CONTENT_LENGTH'] = 900 * 1024 * 1024  # 900 Megabytes
@@ -848,6 +850,7 @@ def submit_rab_kedua():
         initial_status = config.STATUS.WAITING_FOR_MANAGER if is_manado_branch else config.STATUS.WAITING_FOR_COORDINATOR
         data[config.COLUMN_NAMES.STATUS] = initial_status
         data[config.COLUMN_NAMES.TIMESTAMP] = datetime.datetime.now(WIB).isoformat()
+        data[SUBMISSION_ID_COLUMN] = data.get(SUBMISSION_ID_COLUMN) or uuid.uuid4().hex
 
         # --- HITUNG TOTAL ---
         total_non_sbo = 0.0
@@ -930,6 +933,11 @@ def submit_rab_kedua():
         try:
             spreadsheet = google_provider.gspread_client.open_by_key(config.SPREADSHEET_ID_RAB_2)
             worksheet = spreadsheet.worksheet(config.DATA_ENTRY_SHEET_NAME_RAB_2)
+            google_provider.ensure_header_exists_in_sheet(
+                spreadsheet,
+                config.DATA_ENTRY_SHEET_NAME_RAB_2,
+                SUBMISSION_ID_COLUMN
+            )
 
             header = worksheet.row_values(1)
             # Cari index kolom penting
@@ -1043,8 +1051,9 @@ def submit_rab_kedua():
              attachments_list.append((manual_filename, manual_file_bytes, file_pdf_IL_upload.content_type))
 
         for approver_email in approver_emails:
-            approval_url = f"{base_url}/api/handle_rab_2_approval?action=approve&row={new_row_index}&level={target_level}&approver={approver_email}"
-            rejection_url = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={new_row_index}&level={target_level}&approver={approver_email}"
+            submission_id = data.get(SUBMISSION_ID_COLUMN, "")
+            approval_url = f"{base_url}/api/handle_rab_2_approval?action=approve&row={new_row_index}&submission_id={submission_id}&level={target_level}&approver={approver_email}"
+            rejection_url = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={new_row_index}&submission_id={submission_id}&level={target_level}&approver={approver_email}"
 
             email_html = render_template(
                 'email_template.html',
@@ -1118,10 +1127,11 @@ def reject_form_rab():
 @app.route('/api/reject_form/rab_kedua', methods=['GET'])
 def reject_form_rab_kedua():
     row = request.args.get('row')
+    submission_id = request.args.get('submission_id')
     level = request.args.get('level')
     approver = request.args.get('approver')
 
-    log_app("reject_form_rab_kedua", "request received", row=row, level=level, approver=approver)
+    log_app("reject_form_rab_kedua", "request received", row=row, submission_id=submission_id, level=level, approver=approver)
     
     if not all([row, level, approver]):
         log_app("reject_form_rab_kedua", "missing parameters")
@@ -1132,7 +1142,11 @@ def reject_form_rab_kedua():
         # 1. Buka Spreadsheet & Sheet KHUSUS RAB 2
         spreadsheet = google_provider.gspread_client.open_by_key(config.SPREADSHEET_ID_RAB_2)
         worksheet = spreadsheet.worksheet(config.DATA_ENTRY_SHEET_NAME_RAB_2)
-        
+        if submission_id:
+            resolved_row = google_provider.find_row_by_column_value(worksheet, SUBMISSION_ID_COLUMN, submission_id)
+            if resolved_row:
+                row = str(resolved_row)
+
         # 2. Ambil data menggunakan helper 'get_row_data_by_sheet' (bukan get_row_data biasa)
         row_data = google_provider.get_row_data_by_sheet(worksheet, int(row))
         
@@ -1149,6 +1163,7 @@ def reject_form_rab_kedua():
             # Arahkan form action ke handler RAB 2, bukan RAB 1
             form_action=url_for('handle_rab_2_approval', _external=True), 
             row=row,
+            submission_id=submission_id,
             level=level,
             approver=approver,
             item_type="IL",
@@ -1525,13 +1540,14 @@ def handle_rab_2_approval():
 
     action = data.get('action')
     row_str = data.get('row')
+    submission_id = data.get('submission_id')
     level = data.get('level')
     approver = data.get('approver')
     reason = data.get('reason', '-')
     
     logo_url = url_for('static', filename='Alfamart-Emblem.png', _external=True)
 
-    log_app("handle_rab_2_approval", "request received", action=action, row=row_str, level=level, approver=approver)
+    log_app("handle_rab_2_approval", "request received", action=action, row=row_str, submission_id=submission_id, level=level, approver=approver)
 
     if not all([action, row_str, level, approver]):
         log_app("handle_rab_2_approval", "missing parameters")
@@ -1542,6 +1558,14 @@ def handle_rab_2_approval():
         # BUKA SPREADSHEET RAB 2
         spreadsheet = google_provider.gspread_client.open_by_key(config.SPREADSHEET_ID_RAB_2)
         worksheet = spreadsheet.worksheet(config.DATA_ENTRY_SHEET_NAME_RAB_2)
+        if submission_id:
+            resolved_row = google_provider.find_row_by_column_value(worksheet, SUBMISSION_ID_COLUMN, submission_id)
+            if not resolved_row:
+                log_app("handle_rab_2_approval", "submission id not found", submission_id=submission_id)
+                return "Data tidak ditemukan", 404
+            if resolved_row != row:
+                log_app("handle_rab_2_approval", "row resolved by submission id", old_row=row, new_row=resolved_row)
+            row = resolved_row
         
         # Baca data baris
         row_data = google_provider.get_row_data_by_sheet(worksheet, row)
@@ -1729,8 +1753,9 @@ def handle_rab_2_approval():
 
                     # 7. Kirim Email (personalized link per manager)
                     for manager_email in manager_emails:
-                        approval_url_manager = f"{base_url}/api/handle_rab_2_approval?action=approve&row={row}&level=manager&approver={manager_email}"
-                        rejection_url_manager = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={row}&level=manager&approver={manager_email}"
+                        submission_id_param = row_data.get(SUBMISSION_ID_COLUMN, submission_id or "")
+                        approval_url_manager = f"{base_url}/api/handle_rab_2_approval?action=approve&row={row}&submission_id={submission_id_param}&level=manager&approver={manager_email}"
+                        rejection_url_manager = f"{base_url}/api/reject_form/rab_kedua?action=reject&row={row}&submission_id={submission_id_param}&level=manager&approver={manager_email}"
 
                         email_html_manager = render_template(
                             'email_template.html', 

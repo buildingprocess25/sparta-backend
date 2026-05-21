@@ -89,6 +89,9 @@
         <form action="{{ form_action }}" method="POST">
             <input type="hidden" name="action" value="reject">
             <input type="hidden" name="row" value="{{ row }}">
+            {% if submission_id %}
+            <input type="hidden" name="submission_id" value="{{ submission_id }}">
+            {% endif %}
             <input type="hidden" name="approver" value="{{ approver }}">
             {% if gas_url %}
             <input type="hidden" name="gas_url" value="{{ gas_url }}">

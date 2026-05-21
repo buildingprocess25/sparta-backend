@@ -360,7 +360,8 @@ class GoogleServiceProvider:
             result = worksheet.append_row(
                 row_data, 
                 value_input_option='USER_ENTERED',
-                insert_data_option='INSERT_ROWS'
+                insert_data_option='INSERT_ROWS',
+                table_range="A1"
             )
             
             # Parse response untuk mendapatkan row number yang sebenarnya
@@ -2546,7 +2547,8 @@ class GoogleServiceProvider:
         result = worksheet.append_row(
             row_data, 
             value_input_option='USER_ENTERED',
-            insert_data_option='INSERT_ROWS'
+            insert_data_option='INSERT_ROWS',
+            table_range="A1"
         )
         
         # Parse response untuk mendapatkan row number yang sebenarnya
@@ -2623,7 +2625,8 @@ class GoogleServiceProvider:
             approved_sheet.append_row(
                 data_to_append,
                 value_input_option='USER_ENTERED',
-                insert_data_option='INSERT_ROWS'
+                insert_data_option='INSERT_ROWS',
+                table_range="A1"
             )
             return True
         except Exception as e:
@@ -2637,6 +2640,11 @@ class GoogleServiceProvider:
             
             # 2. Buka Worksheet Tujuan (Form3 / Approved Data untuk RAB 2)
             approved_sheet = spreadsheet.worksheet(config.APPROVED_DATA_SHEET_NAME_RAB_2)
+            self.ensure_header_exists_in_sheet(
+                spreadsheet,
+                config.APPROVED_DATA_SHEET_NAME_RAB_2,
+                "Submission_ID"
+            )
             
             # 3. Ambil Header untuk pemetaan data yang benar
             headers = approved_sheet.row_values(1)
@@ -2648,7 +2656,8 @@ class GoogleServiceProvider:
             approved_sheet.append_row(
                 data_to_append,
                 value_input_option='USER_ENTERED',
-                insert_data_option='INSERT_ROWS'
+                insert_data_option='INSERT_ROWS',
+                table_range="A1"
             )
             print("Berhasil menyalin data ke sheet Approved RAB 2")
             return True
@@ -3191,6 +3200,28 @@ class GoogleServiceProvider:
         except Exception as e:
             print(f"Error updating cell [{row_index}, {column_name}] in {worksheet.title}: {e}")
             return False
+
+    def find_row_by_column_value(self, worksheet, column_name, value):
+        try:
+            if value is None or value == "":
+                return None
+
+            headers = worksheet.row_values(1)
+            col_index = headers.index(column_name)
+            all_values = worksheet.get_all_values()
+
+            target_value = str(value).strip()
+            for row_index, row_values in enumerate(all_values[1:], start=2):
+                current_value = row_values[col_index] if len(row_values) > col_index else ""
+                if str(current_value).strip() == target_value:
+                    return row_index
+            return None
+        except ValueError:
+            print(f"Kolom '{column_name}' tidak ditemukan di {worksheet.title}")
+            return None
+        except Exception as e:
+            print(f"Error finding row by {column_name} in {worksheet.title}: {e}")
+            return None
         
     def get_rab_creator_by_ulok(self, nomor_ulok, lingkup_pekerjaan=None):
         try:
