@@ -63,24 +63,12 @@ FORM_SCHEDULE = {
 }
 
 
-def _as_list(value):
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [item for item in value if item]
-    if isinstance(value, tuple):
-        return [item for item in value if item]
-    text = str(value).strip()
-    if not text:
-        return []
-    return [item.strip() for item in text.split(",") if item.strip()]
-
-
 def get_email_details(form_type, data, user_info):
-    pic_emails = _as_list(data.get('pic_building_support'))
+    pic_email = data.get('pic_building_support')
     
     recipients = []
-    recipients.extend(pic_emails)
+    if pic_email:
+        recipients.append(pic_email)
     
     # Menambahkan koordinator dan manajer ke penerima notifikasi awal
     if form_type == 'input_pic':

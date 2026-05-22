@@ -2356,21 +2356,6 @@ class GoogleServiceProvider:
             print(f"Error getting PIC email by Ulok: {e}")
             return None
 
-    def get_pic_emails_by_ulok(self, kode_ulok):
-        try:
-            penugasan_sheet = self.gspread_client.open_by_key(config.PENGAWASAN_SPREADSHEET_ID).worksheet(config.PENUGASAN_SHEET_NAME)
-            all_records = penugasan_sheet.get_all_records()
-            emails = []
-            for record in all_records:
-                if str(record.get('Kode_Ulok', '')).strip() == str(kode_ulok).strip():
-                    email = str(record.get('Email_BBS', '')).strip()
-                    if email and email.lower() not in {item.lower() for item in emails}:
-                        emails.append(email)
-            return emails
-        except Exception as e:
-            print(f"Error getting PIC emails by Ulok: {e}")
-            return []
-
     def upload_file_to_drive(self, file_bytes, filename, mimetype, folder_id):
         file_metadata = {'name': filename, 'parents': [folder_id]}
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mimetype)
@@ -3383,7 +3368,11 @@ class GoogleServiceProvider:
             return None, None, None
 
     def check_ulok_exists_rab_2(self, nomor_ulok):
-        """Mengecek apakah Nomor Ulok sudah ada di Spreadsheet RAB 2"""
+        """Mengecek riwayat Nomor Ulok di Spreadsheet RAB 2.
+
+        Untuk Instruksi Lapangan, hasil ini hanya dipakai sebagai informasi di UI.
+        Submit baru tetap boleh dilakukan walaupun Nomor Ulok sudah pernah ada.
+        """
         try:
             # Buka Spreadsheet RAB 2
             spreadsheet = self.gspread_client.open_by_key(config.SPREADSHEET_ID_RAB_2)
@@ -3396,19 +3385,26 @@ class GoogleServiceProvider:
             # Normalisasi input (hapus spasi/dash untuk perbandingan yang akurat)
             target_ulok = str(nomor_ulok).replace("-", "").strip().upper()
 
+            matching_records = []
             for record in all_records:
                 # Ambil Nomor Ulok dari record
                 record_ulok = str(record.get(config.COLUMN_NAMES.LOKASI, "")).replace("-", "").strip().upper()
                 
                 if record_ulok == target_ulok:
-                    # Jika ketemu, kembalikan statusnya
-                    return {
-                        "exists": True,
-                        "status": record.get(config.COLUMN_NAMES.STATUS, "Unknown"),
-                        "pembuat": record.get(config.COLUMN_NAMES.EMAIL_PEMBUAT, "-")
-                    }
+                    matching_records.append(record)
+
+            if matching_records:
+                latest = matching_records[-1]
+                return {
+                    "exists": True,
+                    "status": latest.get(config.COLUMN_NAMES.STATUS, "Unknown"),
+                    "pembuat": latest.get(config.COLUMN_NAMES.EMAIL_PEMBUAT, "-"),
+                    "lingkup": latest.get(config.COLUMN_NAMES.LINGKUP_PEKERJAAN, latest.get("Lingkup Pekerjaan", "-")),
+                    "total_pengajuan": len(matching_records),
+                    "allow_new_submission": True
+                }
             
-            return {"exists": False}
+            return {"exists": False, "allow_new_submission": True}
             
         except Exception as e:
             print(f"Error checking ULOK RAB 2: {e}")

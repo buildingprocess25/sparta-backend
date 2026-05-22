@@ -143,7 +143,7 @@ def _send_email_safe(context, **send_kwargs):
 
 # --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---
 GAS_URLS = {
-  "input-pic": "https://script.google.com/macros/s/AKfycbx-kTIQKrhM3Nhs827R2R2yOYJHcEMthZrLXfNGt67v4fmxGdtMPmGwTYNu7f76g6aKoQ/exec",
+  "input-pic": "https://script.google.com/macros/s/AKfycbzx8ccoZrAB4cpOI0CKJ_WtxpUkIMHUHkPnsbzE-rRMVmT3PFacEHH9HSWHqqd8QiUWPw/exec",
   "login": "https://script.google.com/macros/s/AKfycbzCWExZ5r__w0viXeC1o5FXerwsqaC8y5XZg_W8zPMozlnLILHOJ1pPT4N-JDOFN6Jy/exec",
   "h2": "https://script.google.com/macros/s/AKfycbyHaiwKENoWsOEEgj2KHr3LQW-PwfkF-Fob7fgvUV52AusSAWaY8etSmeSZeiotK7Jvhw/exec",
   "h5": "https://script.google.com/macros/s/AKfycbzVdc7Uz2SFopdbcaWerO5UK7t6PAc7cPJVrV2s45iwe5uFTGtLzLRP7ZLv4T7kWus/exec",
@@ -345,40 +345,6 @@ def get_tanggal_h(start_date, jumlah_hari_kerja):
         if tanggal.weekday() < 5:
             count += 1
     return tanggal
-
-def _as_list(value):
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [item for item in value if item]
-    if isinstance(value, tuple):
-        return [item for item in value if item]
-    text = str(value).strip()
-    if not text:
-        return []
-    return [item.strip() for item in text.split(",") if item.strip()]
-
-def _normalize_pic_assignments(data):
-    assignments = data.get('pic_assignments')
-    if isinstance(assignments, list) and assignments:
-        normalized = []
-        for item in assignments:
-            if not isinstance(item, dict):
-                continue
-            email = str(item.get('email') or item.get('pic_building_support') or '').strip()
-            nama = str(item.get('nama') or item.get('pic_nama') or '').strip()
-            jabatan = str(item.get('jabatan') or '').strip()
-            if email:
-                normalized.append({'email': email, 'nama': nama, 'jabatan': jabatan})
-        if normalized:
-            return normalized
-
-    emails = _as_list(data.get('pic_building_support'))
-    names = _as_list(data.get('pic_nama'))
-    return [
-        {'email': email, 'nama': names[idx] if idx < len(names) else '', 'jabatan': ''}
-        for idx, email in enumerate(emails)
-    ]
 
 def get_pt_name_by_email(provider, email):
     if not email: return "NAMA PT TIDAK DITEMUKAN"
@@ -888,21 +854,14 @@ def submit_rab_kedua():
                 "message": "Nomor Ulok tidak boleh kosong."
             }), 400
 
-        # Cek revisi / duplikasi
+        # Cek revisi. Untuk Instruksi Lapangan, Nomor Ulok yang sama boleh diajukan
+        # lebih dari satu kali karena tiap IL adalah pengajuan pekerjaan tambahan
+        # yang berbeda. Data ditolak tetap dipakai sebagai revisi agar link approval
+        # lama tidak menggantung, tetapi data aktif/approved tidak memblokir submit baru.
         is_revising = google_provider.is_revision(
             nomor_ulok_raw,
             data.get('Email_Pembuat')
         )
-
-        if not is_revising and google_provider.check_ulok_exists_IL(nomor_ulok_raw, lingkup_pekerjaan):
-            log_app("submit_rab_kedua", "duplicate ulok", ulok=nomor_ulok_raw, lingkup=lingkup_pekerjaan)
-            return jsonify({
-                "status": "error",
-                "message": (
-                    f"Nomor Ulok {nomor_ulok_raw} dengan lingkup {lingkup_pekerjaan} "
-                    "sudah pernah diajukan dan sedang diproses atau sudah disetujui."
-                )
-            }), 409
 
         # 1. Ambil Email Pembuat
         email_pembuat = data.get('Email_Pembuat')
@@ -3443,9 +3402,9 @@ def submit_pengawasan():
         if form_type != 'input_pic':
             kode_ulok = data.get('kode_ulok')
             if kode_ulok:
-                pic_emails = google_provider.get_pic_emails_by_ulok(kode_ulok)
-                if pic_emails:
-                    data['pic_building_support'] = pic_emails
+                pic_email = google_provider.get_pic_email_by_ulok(kode_ulok)
+                if pic_email:
+                    data['pic_building_support'] = pic_email
                 else:
                     log_app("submit_pengawasan", "pic not found", kode_ulok=kode_ulok)
                     return jsonify({"status": "error", "message": f"PIC tidak ditemukan untuk Kode Ulok {kode_ulok}. Pastikan proyek ini sudah diinisiasi."}), 404
@@ -3458,25 +3417,15 @@ def submit_pengawasan():
         }
 
         if form_type == 'input_pic':
-            pic_assignments = _normalize_pic_assignments(data)
-            if not pic_assignments:
-                return jsonify({"status": "error", "message": "Minimal satu PIC Building Support wajib dipilih."}), 400
-
-            pic_emails = [pic['email'] for pic in pic_assignments]
-            pic_names = [pic['nama'] for pic in pic_assignments if pic.get('nama')]
-            data['pic_building_support'] = pic_emails
-            data['pic_nama'] = pic_names
-
             input_pic_data = {
                 'Timestamp': timestamp.isoformat(),
                 'Cabang': data.get('cabang'),
                 'Kode_Ulok': data.get('kode_ulok'),
                 'Kategori_Lokasi': data.get('kategori_lokasi'),
                 'Tanggal_Mulai_SPK': data.get('tanggal_spk'),
-                'PIC_Building_Support': ", ".join(pic_emails),
-                'PIC_Nama': ", ".join(pic_names),
-                'SPK_URL': data.get('spkUrl') or data.get('spk_url'),
-                'RAB_URL': data.get('rabUrl') or data.get('rab_url')
+                'PIC_Building_Support': data.get('pic_building_support'),
+                'SPK_URL': data.get('spkUrl'),
+                'RAB_URL': data.get('rabUrl')
             }
             google_provider.append_to_dynamic_sheet(
                 config.PENGAWASAN_SPREADSHEET_ID, 
@@ -3484,18 +3433,16 @@ def submit_pengawasan():
                 input_pic_data
             )
 
-            for pic in pic_assignments:
-                penugasan_data = {
-                    'Email_BBS': pic['email'],
-                    'Nama_BBS': pic.get('nama', ''),
-                    'Kode_Ulok': data.get('kode_ulok'),
-                    'Cabang': data.get('cabang')
-                }
-                google_provider.append_to_dynamic_sheet(
-                    config.PENGAWASAN_SPREADSHEET_ID, 
-                    config.PENUGASAN_SHEET_NAME,
-                    penugasan_data
-                )
+            penugasan_data = {
+                'Email_BBS': data.get('pic_building_support'),
+                'Kode_Ulok': data.get('kode_ulok'),
+                'Cabang': data.get('cabang')
+            }
+            google_provider.append_to_dynamic_sheet(
+                config.PENGAWASAN_SPREADSHEET_ID, 
+                config.PENUGASAN_SHEET_NAME,
+                penugasan_data
+            )
             
             tanggal_spk_obj = datetime.datetime.fromisoformat(data.get('tanggal_spk'))
             tanggal_mengawas = get_tanggal_h(tanggal_spk_obj, 2)

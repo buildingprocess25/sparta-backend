@@ -42,18 +42,7 @@
                 {% if form_type == 'input_pic' %}
                     <strong>Kategori Lokasi:</strong> {{ form_data.kategori_lokasi | replace('_', ' ') | title }}<br>
                     <strong>Tanggal Mulai SPK:</strong> {{ form_data.tanggal_spk }}<br>
-                    <strong>PIC Building Support:</strong>
-                    {% if form_data.pic_nama %}
-                        {% if form_data.pic_nama is string %}
-                            {{ form_data.pic_nama }}
-                        {% else %}
-                            {{ form_data.pic_nama | join(', ') }}
-                        {% endif %}
-                    {% elif form_data.pic_building_support is string %}
-                        {{ form_data.pic_building_support }}
-                    {% else %}
-                        {{ form_data.pic_building_support | join(', ') }}
-                    {% endif %}
+                    <strong>PIC Building Support:</strong> {{ form_data.pic_building_support }}
                 {% endif %}
             </p>
             
