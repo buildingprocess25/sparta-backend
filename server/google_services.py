@@ -2356,6 +2356,21 @@ class GoogleServiceProvider:
             print(f"Error getting PIC email by Ulok: {e}")
             return None
 
+    def get_pic_emails_by_ulok(self, kode_ulok):
+        try:
+            penugasan_sheet = self.gspread_client.open_by_key(config.PENGAWASAN_SPREADSHEET_ID).worksheet(config.PENUGASAN_SHEET_NAME)
+            all_records = penugasan_sheet.get_all_records()
+            emails = []
+            for record in all_records:
+                if str(record.get('Kode_Ulok', '')).strip() == str(kode_ulok).strip():
+                    email = str(record.get('Email_BBS', '')).strip()
+                    if email and email.lower() not in {item.lower() for item in emails}:
+                        emails.append(email)
+            return emails
+        except Exception as e:
+            print(f"Error getting PIC emails by Ulok: {e}")
+            return []
+
     def upload_file_to_drive(self, file_bytes, filename, mimetype, folder_id):
         file_metadata = {'name': filename, 'parents': [folder_id]}
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mimetype)
