@@ -72,6 +72,42 @@ app.register_blueprint(doc_bp)
 app.register_blueprint(dokumentasi_bp) # <--- dokumentasi bangunan
 app.json.sort_keys = False
 
+ALLOWED_CORS_ORIGINS = {
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://localhost:3000",
+    "https://building-alfamart.vercel.app",
+    "https://instruksi-lapangan.vercel.app",
+    "https://gantt-chart-bnm.vercel.app",
+    "https://sparta-alfamart.vercel.app",
+    "https://frontend-form-virid.vercel.app",
+    "https://script.google.com",
+    "https://opnamebnm.vercel.app",
+    "https://penyimpanan-dokumen.vercel.app",
+    "https://dokumentasi-bangunan.vercel.app",
+    "https://sparta-bnm.vercel.app",
+}
+
+
+@app.before_request
+def handle_cors_preflight():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin")
+    if origin in ALLOWED_CORS_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = request.headers.get(
+            "Access-Control-Request-Headers",
+            "Content-Type, Authorization"
+        )
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, PATCH, DELETE"
+    return response
+
 # --- LOGGING HELPER ---
 def log_app(func: str, message: str, **kwargs):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2130,7 +2166,7 @@ def get_ulok_by_cabang_pic():
         log_app("get_ulok_by_cabang_pic", "error", error=str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/api/gantt/insert', methods=['POST'])
+@app.route('/api/gantt/insert', methods=['POST', 'OPTIONS'])
 def insert_gantt_data():
     """
     Insert data baru ke sheet Gantt Chart.
@@ -2138,6 +2174,9 @@ def insert_gantt_data():
     
     Jika Status = "Terkunci", kirim email notifikasi ke Koordinator.
     """
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     data = request.get_json()
     if not data:
         log_app("insert_gantt_data", "request body empty")
