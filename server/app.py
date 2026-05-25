@@ -162,7 +162,7 @@ GAS_URLS = {
   "h32": "https://script.google.com/macros/s/AKfycbxqGR62PV_X86mFFJpMclgNYtGvkx8gVboONt62ynnFdOr25xKINkelEBdqnrqP7SHN/exec",
   "h33": "https://script.google.com/macros/s/AKfycbzuYFFG018O54U4nsp6iEtJ4kg57no3Juan22FICwf_VZkpNLjKMW7ZLu3Z_6WoWYsTOA/exec",
   "h41": "https://script.google.com/macros/s/AKfycbwgIbxOWzUeVwMnzqUsrggqTivg-_mtUXEnNYVKs8aIRlmcJo4JZz5dPlXDYfn4Fbib/exec",
-  "serah_terima": "https://script.google.com/macros/s/AKfycbzYIuPoVoaD6HT7GjmGI2flSKzepirT9KztAX0Qg8vZbaixOBw3yhXe70qea8KCSuogtA/exec",
+  "serah_terima": "https://script.google.com/macros/s/AKfycbzXN0xSNPF84Y6bkTYvoqoDgeGxPhVzZZdApx-mzWsBzcGU8pKuViaW5IX7DCqnt9fpxw/exec",
   "perpanjangan_spk": "https://script.google.com/macros/s/AKfycbyQRhiyX-zAyIyyHHU8OASCTj9O2tCSmnNesiX9o3q9ipQjKp5Qkx_LN6UmARtWMqJe/exec",
   "login_perpanjanganspk": "https://script.google.com/macros/s/AKfycbyQRhiyX-zAyIyyHHU8OASCTj9O2tCSmnNesiX9o3q9ipQjKp5Qkx_LN6UmARtWMqJe/exec"
 }
