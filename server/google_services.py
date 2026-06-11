@@ -444,8 +444,30 @@ class GoogleServiceProvider:
             if not kontraktor_name:
                 return None
 
-            target_name = " ".join(str(kontraktor_name).split()).upper()
-            target_wilayah = " ".join(str(wilayah or "").split()).upper()
+            def normalize_contractor_name(value):
+                text = str(value or "").upper()
+                text = re.sub(r"[^A-Z0-9]+", " ", text)
+                tokens = [token for token in text.split() if token not in {"CV", "PT"}]
+                return " ".join(tokens)
+
+            branch_groups = {
+                "CIKOKOL": {"CIKOKOL", "BINTAN"},
+                "LOMBOK": {"LOMBOK", "SUMBAWA"},
+                "MEDAN": {"MEDAN", "ACEH"},
+                "LAMPUNG": {"LAMPUNG", "KOTABUMI"},
+                "PALEMBANG": {"PALEMBANG", "BENGKULU", "BANGKA", "BELITUNG"},
+                "SIDOARJO": {"SIDOARJO", "SIDOARJO BPN_SMD", "MANOKWARI", "NTT", "SORONG"},
+            }
+
+            target_name = normalize_contractor_name(kontraktor_name)
+            target_wilayah_raw = " ".join(str(wilayah or "").split()).upper()
+            target_wilayah_set = {target_wilayah_raw} if target_wilayah_raw else set()
+            for group_name, members in branch_groups.items():
+                if target_wilayah_raw in members:
+                    target_wilayah_set = set(members)
+                    target_wilayah_set.add(group_name)
+                    break
+
             kontraktor_sheet_object = self.gspread_client.open_by_key(config.KONTRAKTOR_SHEET_ID)
             worksheet = kontraktor_sheet_object.worksheet(config.KONTRAKTOR_SHEET_NAME)
             all_values = worksheet.get_all_values()
@@ -455,13 +477,18 @@ class GoogleServiceProvider:
             headers = all_values[1]
             records = [dict(zip(headers, row)) for row in all_values[2:]]
             for record in records:
-                record_name = " ".join(str(record.get("NAMA KONTRAKTOR", "")).split()).upper()
+                record_name = normalize_contractor_name(record.get("NAMA KONTRAKTOR", ""))
                 record_status = str(record.get("STATUS KONTRAKTOR", "")).strip().upper()
-                record_wilayah = " ".join(str(record.get("WILAYAH", "")).split()).upper()
+                record_wilayah_text = str(record.get("WILAYAH", ""))
+                record_wilayah_set = {
+                    " ".join(part.split()).upper()
+                    for part in re.split(r"[,;/]", record_wilayah_text)
+                    if part.strip()
+                }
 
                 if record_name != target_name or record_status != "AKTIF":
                     continue
-                if target_wilayah and record_wilayah and record_wilayah != target_wilayah:
+                if target_wilayah_set and record_wilayah_set and not (record_wilayah_set & target_wilayah_set):
                     continue
 
                 email_keys = [key for key in record.keys() if "EMAIL" in str(key).upper()]
