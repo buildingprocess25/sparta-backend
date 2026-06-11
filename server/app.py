@@ -4077,6 +4077,107 @@ def submit_rejection_perpanjangan():
         log_app("submit_rejection_perpanjangan", "error", error=str(e))
         return render_template("response_page.html", title="Error", message="Gagal memproses penolakan.")
 
+
+@app.route('/api/resend_perpanjangan_spk', methods=['POST'])
+def resend_perpanjangan_spk():
+    try:
+        data = request.get_json() if request.is_json else {}
+        if not data:
+            return jsonify({"status": "error", "message": "Request body tidak boleh kosong."}), 400
+
+        row = data.get("row")
+        gas_url = data.get("gas_url") or GAS_URLS.get("perpanjangan_spk")
+
+        if row:
+            recipient_response = requests.get(gas_url, params={"action": "getRecipientInfo", "row": row})
+            recipient_response.raise_for_status()
+            final_data = recipient_response.json()
+            final_data.update({k: v for k, v in data.items() if v not in (None, "")})
+        else:
+            final_data = dict(data)
+
+        final_data["status_persetujuan"] = (
+            final_data.get("status_persetujuan")
+            or final_data.get("status")
+            or "DISETUJUI"
+        )
+        final_data["nomor_ulok"] = _first_present(final_data, ("nomor_ulok", "Nomor Ulok", "ulok"))
+        final_data["tanggal_spk_akhir"] = _first_present(
+            final_data,
+            ("tanggal_spk_akhir", "Tanggal SPK Akhir", "spk_akhir_lama"),
+        )
+        final_data["pertambahan_hari"] = _first_present(
+            final_data,
+            ("pertambahan_hari", "Pertambahan Hari", "tambah_hari"),
+        )
+        final_data["tanggal_spk_akhir_setelah_perpanjangan"] = _first_present(
+            final_data,
+            (
+                "tanggal_spk_akhir_setelah_perpanjangan",
+                "tanggal_spk_akhir_baru",
+                "Tanggal SPK Akhir Setelah Perpanjangan",
+                "spk_akhir_baru",
+            ),
+        )
+        final_data["disetujui_oleh"] = _first_present(
+            final_data,
+            ("disetujui_oleh", "Ditinjau Oleh", "approver_name", "approver"),
+        )
+        final_data["waktu_persetujuan"] = _first_present(
+            final_data,
+            ("waktu_persetujuan", "Waktu Persetujuan", "waktu_respon"),
+        )
+        final_data["link_pdf"] = _first_present(final_data, ("link_pdf", "Link PDF", "pdf_url"))
+        final_data["link_lampiran_user"] = _first_present(
+            final_data,
+            ("link_lampiran_user", "Link Lampiran User", "lampiran_url"),
+        )
+
+        if not final_data.get("nomor_ulok"):
+            return jsonify({"status": "error", "message": "nomor_ulok wajib diisi."}), 400
+
+        subject, body = generate_perpanjangan_email_body(final_data)
+        recipients = _normalize_email_list(data.get("to")) or _build_perpanjangan_recipients(final_data)
+        cc = _normalize_email_list(data.get("cc"))
+        attachments = _build_perpanjangan_attachments(final_data)
+
+        if not recipients:
+            return jsonify({
+                "status": "error",
+                "message": "Penerima email tidak ditemukan dari data SPK/master kontraktor.",
+            }), 400
+
+        google_provider.send_email(
+            to=recipients,
+            cc=cc or None,
+            subject=subject,
+            html_body=body,
+            attachments=attachments or None,
+        )
+
+        log_app(
+            "resend_perpanjangan_spk",
+            "email sent",
+            ulok=final_data.get("nomor_ulok"),
+            recipients=recipients,
+            cc=cc,
+            attachment_count=len(attachments),
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Email perpanjangan SPK berhasil dikirim ulang.",
+            "recipients": recipients,
+            "cc": cc,
+            "attachment_count": len(attachments),
+        }), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        log_app("resend_perpanjangan_spk", "error", error=str(e))
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # --- ENDPOINT KIRIM EMAIL GENERAL (MIGRASI DARI BACKEND LAMA) ---
 @app.route('/api/send-email', methods=['POST'])
 def send_email_general():
