@@ -418,6 +418,62 @@ class GoogleServiceProvider:
             print(f"Error saat mencari SPK URL: {e}")
             return None
 
+    def get_latest_approved_spk_by_ulok(self, kode_ulok):
+        try:
+            target_ulok = self._normalize_ulok(kode_ulok)
+            spk_sheet = self._with_google_retry(
+                lambda: self.sheet.worksheet(config.SPK_DATA_SHEET_NAME),
+                op_name="latest_spk_open_worksheet",
+            )
+            all_records = self._with_google_retry(
+                lambda: spk_sheet.get_all_records(),
+                op_name="latest_spk_get_all_records",
+            )
+            for record in reversed(all_records):
+                record_ulok = self._normalize_ulok(record.get("Nomor Ulok", ""))
+                record_status = str(record.get("Status", "")).strip()
+                if record_ulok == target_ulok and record_status == config.STATUS.SPK_APPROVED:
+                    return record
+            return None
+        except Exception as e:
+            print(f"Error saat mencari data SPK terbaru: {e}")
+            return None
+
+    def get_kontraktor_email_by_name(self, kontraktor_name, wilayah=None):
+        try:
+            if not kontraktor_name:
+                return None
+
+            target_name = " ".join(str(kontraktor_name).split()).upper()
+            target_wilayah = " ".join(str(wilayah or "").split()).upper()
+            kontraktor_sheet_object = self.gspread_client.open_by_key(config.KONTRAKTOR_SHEET_ID)
+            worksheet = kontraktor_sheet_object.worksheet(config.KONTRAKTOR_SHEET_NAME)
+            all_values = worksheet.get_all_values()
+            if len(all_values) < 3:
+                return None
+
+            headers = all_values[1]
+            records = [dict(zip(headers, row)) for row in all_values[2:]]
+            for record in records:
+                record_name = " ".join(str(record.get("NAMA KONTRAKTOR", "")).split()).upper()
+                record_status = str(record.get("STATUS KONTRAKTOR", "")).strip().upper()
+                record_wilayah = " ".join(str(record.get("WILAYAH", "")).split()).upper()
+
+                if record_name != target_name or record_status != "AKTIF":
+                    continue
+                if target_wilayah and record_wilayah and record_wilayah != target_wilayah:
+                    continue
+
+                email_keys = [key for key in record.keys() if "EMAIL" in str(key).upper()]
+                for key in email_keys:
+                    email = str(record.get(key, "")).strip()
+                    if email:
+                        return email
+            return None
+        except Exception as e:
+            print(f"Error saat mencari email kontraktor: {e}")
+            return None
+
     def get_spk_data_by_cabang(self, cabang):
         spk_list = []
         try:

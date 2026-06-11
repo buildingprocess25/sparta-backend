@@ -140,6 +140,94 @@ def _send_email_safe(context, **send_kwargs):
         return False
 
 
+def _normalize_email_list(value):
+    if not value:
+        return []
+    if isinstance(value, str):
+        raw_items = value.replace(";", ",").split(",")
+    else:
+        raw_items = value
+
+    emails = []
+    seen = set()
+    for item in raw_items:
+        email = str(item or "").strip().lower()
+        if not email or "@" not in email or email in seen:
+            continue
+        seen.add(email)
+        emails.append(email)
+    return emails
+
+
+def _first_present(data, keys):
+    for key in keys:
+        value = data.get(key)
+        if value not in (None, ""):
+            return value
+    return ""
+
+
+def _build_perpanjangan_recipients(final_data):
+    recipients = _normalize_email_list(final_data.get("recipients", []))
+    nomor_ulok = _first_present(final_data, ("nomor_ulok", "Nomor Ulok", "ulok"))
+
+    spk_data = google_provider.get_latest_approved_spk_by_ulok(nomor_ulok)
+    if not spk_data:
+        log_app("perpanjangan_recipients", "spk source not found, using GAS recipients", ulok=nomor_ulok)
+        return recipients
+
+    creator_email = _first_present(
+        spk_data,
+        ("Email_Pembuat", "Dibuat Oleh", "dibuat_oleh_email", "email_pembuat"),
+    )
+    kontraktor_name = _first_present(
+        spk_data,
+        ("Nama Kontraktor", "Nama_Kontraktor", "Kontraktor", "Nama_PT"),
+    )
+    cabang = _first_present(spk_data, ("Cabang", "cabang"))
+    kontraktor_email = google_provider.get_kontraktor_email_by_name(kontraktor_name, cabang)
+
+    expected_recipients = _normalize_email_list([creator_email, kontraktor_email])
+    if expected_recipients:
+        gas_set = set(recipients)
+        expected_set = set(expected_recipients)
+        unexpected = sorted(gas_set - expected_set)
+        if unexpected:
+            log_app(
+                "perpanjangan_recipients",
+                "GAS recipients mismatch, replaced with SPK source",
+                ulok=nomor_ulok,
+                kontraktor=kontraktor_name,
+                unexpected=unexpected,
+                expected=expected_recipients,
+            )
+        return expected_recipients
+
+    log_app(
+        "perpanjangan_recipients",
+        "SPK source has no contractor email, using GAS recipients",
+        ulok=nomor_ulok,
+        kontraktor=kontraktor_name,
+    )
+    return recipients
+
+
+def _build_perpanjangan_attachments(final_data):
+    attachments = []
+    for link_key, fallback_name in (
+        ("link_pdf", "Laporan_Pertambahan_Hari_SPK.pdf"),
+        ("link_lampiran_user", "Lampiran_Pendukung.pdf"),
+    ):
+        link = final_data.get(link_key)
+        if not link or link == "-":
+            continue
+        filename, file_bytes, mime_type = google_provider.download_file_from_link(link)
+        if filename and file_bytes:
+            attachments.append((filename or fallback_name, file_bytes, mime_type or "application/pdf"))
+        else:
+            log_app("perpanjangan_attachment", "failed to download attachment", key=link_key, link=link)
+    return attachments
+
 
 # --- KONFIGURASI PROXY GAS (DARI BACKEND LAMA) ---
 GAS_URLS = {
@@ -3858,14 +3946,22 @@ def approve_perpanjangan():
         if not gas_url:
              return render_template("response_page.html", title="Error", message="URL GAS tidak ditemukan.")
 
-        # 1. Panggil GAS untuk proses approval
+        # 1. Validasi row sebelum approval agar link lama/row bergeser tidak memproses data lain.
+        precheck_response = requests.get(gas_url, params={'action': 'getRecipientInfo', 'row': row})
+        precheck_data = precheck_response.json()
+        precheck_ulok = _first_present(precheck_data, ("nomor_ulok", "Nomor Ulok", "ulok"))
+        if ulok and precheck_ulok and str(precheck_ulok).strip().upper() != str(ulok).strip().upper():
+            log_app("approve_perpanjangan", "row ulok mismatch", row=row, expected=ulok, actual=precheck_ulok)
+            return render_template("response_page.html", title="Error", message="Data approval tidak sesuai dengan Ulok pada link. Approval dibatalkan.")
+
+        # 2. Panggil GAS untuk proses approval
         approval_response = requests.get(f"{gas_url}?action=processApproval&row={row}&approver={approver}")
         approval_data = approval_response.json()
 
         if approval_data.get('status') != 'success':
             return render_template("response_page.html", title="Error", message=approval_data.get('message', 'Gagal memproses persetujuan.'))
 
-        # 2. Ambil Info Penerima Email dari GAS
+        # 3. Ambil Info Penerima Email dari GAS
         recipient_response = requests.get(f"{gas_url}?action=getRecipientInfo&row={row}")
         final_data = recipient_response.json()
 
@@ -3875,11 +3971,15 @@ def approve_perpanjangan():
         # Gunakan helper untuk generate subject & body
         subject, body = generate_perpanjangan_email_body(final_data)
         
-        # Ambil list email penerima
-        recipients = final_data.get('recipients', [])
+        # Ambil penerima dari data SPK yang disetujui, bukan percaya mentah-mentah row GAS.
+        recipients = _build_perpanjangan_recipients(final_data)
+        attachments = _build_perpanjangan_attachments(final_data)
         
-        # Kirim pakai google_provider
-        google_provider.send_email(to=recipients, subject=subject, html_body=body)
+        if not recipients:
+            log_app("approve_perpanjangan", "no valid recipients", row=row, ulok=ulok)
+            return render_template("response_page.html", title="Error", message="Penerima email kontraktor tidak ditemukan. Approval sudah diproses, tetapi email tidak dikirim.")
+
+        google_provider.send_email(to=recipients, subject=subject, html_body=body, attachments=attachments or None)
         log_app("approve_perpanjangan", "email sent", recipients=len(recipients) if recipients else 0)
         # 4. Render halaman sukses
         return render_template("response_page.html", title="Berhasil", message=f"Perpanjangan SPK untuk Ulok {ulok} berhasil DISETUJUI.")
@@ -3930,7 +4030,15 @@ def submit_rejection_perpanjangan():
 
         log_app("submit_rejection_perpanjangan", "request received", row=row, approver=approver, ulok=ulok)
 
-        # 1. Panggil GAS untuk proses rejection
+        # 1. Validasi row sebelum rejection agar link lama/row bergeser tidak memproses data lain.
+        precheck_response = requests.get(gas_url, params={'action': 'getRecipientInfo', 'row': row})
+        precheck_data = precheck_response.json()
+        precheck_ulok = _first_present(precheck_data, ("nomor_ulok", "Nomor Ulok", "ulok"))
+        if ulok and precheck_ulok and str(precheck_ulok).strip().upper() != str(ulok).strip().upper():
+            log_app("submit_rejection_perpanjangan", "row ulok mismatch", row=row, expected=ulok, actual=precheck_ulok)
+            return render_template("response_page.html", title="Error", message="Data approval tidak sesuai dengan Ulok pada link. Penolakan dibatalkan.")
+
+        # 2. Panggil GAS untuk proses rejection
         # Gunakan requests, encode params otomatis handle URL encoding
         payload = {
             'action': 'processRejection',
@@ -3944,20 +4052,24 @@ def submit_rejection_perpanjangan():
         if rejection_data.get('status') != 'success':
              return render_template("response_page.html", title="Error", message=rejection_data.get('message', 'Gagal memproses penolakan.'))
 
-        # 2. Ambil Info Penerima Email
+        # 3. Ambil Info Penerima Email
         recipient_response = requests.get(f"{gas_url}?action=getRecipientInfo&row={row}")
         final_data = recipient_response.json()
 
-        # 3. Kirim Email Notifikasi
         # [UPDATED] Kirim Email Notifikasi
         final_data['status_persetujuan'] = 'DITOLAK'
         final_data['alasan_penolakan'] = reason
         
         # Gunakan helper
         subject, body = generate_perpanjangan_email_body(final_data)
-        recipients = final_data.get('recipients', [])
+        recipients = _build_perpanjangan_recipients(final_data)
+        attachments = _build_perpanjangan_attachments(final_data)
         
-        google_provider.send_email(to=recipients, subject=subject, html_body=body)
+        if not recipients:
+            log_app("submit_rejection_perpanjangan", "no valid recipients", row=row, ulok=ulok)
+            return render_template("response_page.html", title="Error", message="Penerima email kontraktor tidak ditemukan. Penolakan sudah diproses, tetapi email tidak dikirim.")
+
+        google_provider.send_email(to=recipients, subject=subject, html_body=body, attachments=attachments or None)
         log_app("submit_rejection_perpanjangan", "email sent", recipients=len(recipients) if recipients else 0)
         return render_template("response_page.html", title="Berhasil", message=f"Perpanjangan SPK untuk Ulok {ulok} berhasil DITOLAK.")
 
